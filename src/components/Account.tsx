@@ -169,9 +169,16 @@ export function Account() {
                 <p className="text-zinc-100 font-mono">v1.2.0-mobile-ready</p>
               </div>
 
-              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl">
-                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Armazenamento Local</p>
-                <p className="text-zinc-100">Seus dados são salvos apenas neste navegador.</p>
+              <div className="p-4 bg-zinc-950 border border-emerald-500/10 rounded-xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <ShieldCheck className="w-12 h-12 text-emerald-400" />
+                </div>
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 relative z-10">Status de Sincronização</p>
+                <div className="flex items-center gap-2 relative z-10">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <p className="text-zinc-100 font-medium">Nuvem Ativa (Firebase)</p>
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-1 relative z-10">Seus dados estão protegidos e sincronizados.</p>
               </div>
             </div>
           </div>
