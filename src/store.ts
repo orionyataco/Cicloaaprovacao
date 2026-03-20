@@ -94,8 +94,11 @@ interface AppState {
   userProfile: UserProfile;
   currentCycleIndex: number;
   activeTopicId: string | null;
+  isAuthenticated: boolean;
 
   // Actions
+  login: () => void;
+  logout: () => void;
   addSubject: (subject: Omit<Subject, 'id'>) => void;
   addTopic: (topic: Omit<Topic, 'id' | 'lastStudiedAt' | 'nextReviewAt' | 'reviewCount'>) => void;
   updateTopicStatus: (id: string, status: TopicStatus) => void;
@@ -168,6 +171,10 @@ export const useStore = create<AppState>()(
       },
       currentCycleIndex: 0,
       activeTopicId: null,
+      isAuthenticated: false,
+
+      login: () => set({ isAuthenticated: true }),
+      logout: () => set({ isAuthenticated: false }),
 
       addSubject: (subject) => set((state) => ({ subjects: [...state.subjects, { ...subject, id: generateId() }] })),
       

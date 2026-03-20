@@ -5,16 +5,23 @@ import { Edital } from './components/Edital';
 import { Flashcards } from './components/Flashcards';
 import { Simulados } from './components/Simulados';
 import { Account } from './components/Account';
+import { Login } from './components/Login';
+import { Signup } from './components/Signup';
 import { useStore } from './store';
-import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle } from 'lucide-react';
+import { useFirebaseSync } from './hooks/useFirebaseSync';
+import { auth } from './lib/firebase';
+import { signOut } from 'firebase/auth';
+import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle, LogOut } from 'lucide-react';
 import { cn } from './lib/utils';
 
 type View = 'dashboard' | 'edital' | 'flashcards' | 'simulados' | 'account';
 
 export default function App() {
-  const { userProfile } = useStore();
+  useFirebaseSync();
+  const { userProfile, isAuthenticated, login, logout } = useStore();
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSignup, setIsSignup] = useState(false);
 
   const navItems = [
     { id: 'dashboard', label: 'Relatórios de Performance', icon: LayoutDashboard },
@@ -27,6 +34,23 @@ export default function App() {
     setCurrentView(view);
     setIsSidebarOpen(false);
   };
+
+  if (!isAuthenticated) {
+    if (isSignup) {
+      return (
+        <Signup 
+          onSignup={() => { login(); setIsSignup(false); }} 
+          onBackToLogin={() => setIsSignup(false)} 
+        />
+      );
+    }
+    return (
+      <Login 
+        onLogin={login} 
+        onGotoSignup={() => setIsSignup(true)} 
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden selection:bg-emerald-500/30">
@@ -80,7 +104,7 @@ export default function App() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-zinc-800">
+        <div className="p-4 space-y-3 border-t border-zinc-800">
           <button 
             onClick={() => handleViewChange('account')}
             className={cn(
@@ -108,6 +132,16 @@ export default function App() {
                 </div>
               </div>
             </div>
+          </button>
+          <button 
+            onClick={async () => {
+              await signOut(auth);
+              logout();
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-zinc-500 hover:bg-red-500/10 hover:text-red-400 border border-transparent transition-all"
+          >
+            <LogOut className="w-5 h-5" />
+            Sair da Conta
           </button>
         </div>
       </aside>
