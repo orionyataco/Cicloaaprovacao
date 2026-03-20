@@ -44,6 +44,11 @@ export function Edital() {
       return;
     }
 
+    if (file.size > 20 * 1024 * 1024) { // 20MB limit
+      showToast('O arquivo é muito grande (máximo 20MB). Para editais maiores, tente separar as páginas do conteúdo programático.', 'error');
+      return;
+    }
+
     setIsUploading(true);
     try {
       const reader = new FileReader();

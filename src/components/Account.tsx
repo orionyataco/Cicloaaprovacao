@@ -21,8 +21,8 @@ export function Account() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 1024 * 1024) { // 1MB limit
-        alert('A imagem deve ter no máximo 1MB.');
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        alert('A imagem deve ter no máximo 5MB.');
         return;
       }
       const reader = new FileReader();
@@ -75,7 +75,7 @@ export function Account() {
               </div>
               <div className="text-center sm:text-left">
                 <h3 className="text-zinc-100 font-semibold">Foto de Perfil</h3>
-                <p className="text-xs text-zinc-500 mt-1">PNG, JPG ou WEBP. Máximo de 1MB.</p>
+                <p className="text-xs text-zinc-500 mt-1">PNG, JPG ou WEBP. Máximo de 5MB.</p>
                 {formData.avatar && (
                   <button 
                     onClick={() => setFormData({ ...formData, avatar: null })}
