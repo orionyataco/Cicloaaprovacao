@@ -4,12 +4,15 @@ import { Dashboard } from './components/Dashboard';
 import { Edital } from './components/Edital';
 import { Flashcards } from './components/Flashcards';
 import { Simulados } from './components/Simulados';
-import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X } from 'lucide-react';
+import { Account } from './components/Account';
+import { useStore } from './store';
+import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle } from 'lucide-react';
 import { cn } from './lib/utils';
 
-type View = 'dashboard' | 'edital' | 'flashcards' | 'simulados';
+type View = 'dashboard' | 'edital' | 'flashcards' | 'simulados' | 'account';
 
 export default function App() {
+  const { userProfile } = useStore();
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -78,13 +81,34 @@ export default function App() {
         </nav>
 
         <div className="p-4 border-t border-zinc-800">
-          <div className="bg-zinc-950 rounded-xl p-4 border border-zinc-800">
-            <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold mb-2">Método Ativo</div>
-            <div className="flex items-center gap-2 text-sm text-zinc-300">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              24/7/30
+          <button 
+            onClick={() => handleViewChange('account')}
+            className={cn(
+              "w-full bg-zinc-950 rounded-xl p-4 border transition-all text-left group",
+              currentView === 'account' ? "border-emerald-500/50 bg-emerald-500/5" : "border-zinc-800 hover:border-zinc-700"
+            )}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Perfil do Usuário</div>
+              <UserCircle className={cn("w-4 h-4 transition-colors", currentView === 'account' ? "text-emerald-400" : "text-zinc-600 group-hover:text-zinc-400")} />
             </div>
-          </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 overflow-hidden flex items-center justify-center shrink-0">
+                {userProfile.avatar ? (
+                  <img src={userProfile.avatar} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <UserCircle className="w-6 h-6 text-zinc-700" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="font-semibold text-zinc-200 truncate">{userProfile.name}</div>
+                <div className="flex items-center gap-2 text-[10px] text-zinc-500 mt-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  {userProfile.activeMethod}
+                </div>
+              </div>
+            </div>
+          </button>
         </div>
       </aside>
 
@@ -101,7 +125,7 @@ export default function App() {
             </button>
             <div className="hidden sm:block w-2 h-8 bg-emerald-500 rounded-full" />
             <h2 className="text-lg lg:text-xl font-semibold text-zinc-100 truncate max-w-[150px] sm:max-w-none">
-              {navItems.find(i => i.id === currentView)?.label}
+              {currentView === 'account' ? 'Minha Conta' : navItems.find(i => i.id === currentView)?.label}
             </h2>
           </div>
           <Timer />
@@ -114,6 +138,7 @@ export default function App() {
             {currentView === 'edital' && <Edital />}
             {currentView === 'flashcards' && <Flashcards />}
             {currentView === 'simulados' && <Simulados />}
+            {currentView === 'account' && <Account />}
           </div>
         </div>
       </main>

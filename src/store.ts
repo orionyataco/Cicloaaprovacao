@@ -73,6 +73,15 @@ export interface StudySession {
   date: string;
 }
 
+export interface UserProfile {
+  name: string;
+  bio: string;
+  birthDate: string;
+  gender: string;
+  activeMethod: string;
+  avatar: string | null;
+}
+
 interface AppState {
   subjects: Subject[];
   topics: Topic[];
@@ -82,6 +91,7 @@ interface AppState {
   studySessions: StudySession[];
   editalInfo: EditalInfo;
   scheduleConfig: ScheduleConfig;
+  userProfile: UserProfile;
   currentCycleIndex: number;
   activeTopicId: string | null;
 
@@ -101,7 +111,9 @@ interface AppState {
   deleteAllSubjects: () => void;
   updateEditalInfo: (info: Partial<EditalInfo>) => void;
   updateScheduleConfig: (config: Partial<ScheduleConfig>) => void;
+  updateUserProfile: (profile: Partial<UserProfile>) => void;
   setCurrentCycleIndex: (index: number) => void;
+  resetAllData: () => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -145,6 +157,14 @@ export const useStore = create<AppState>()(
       scheduleConfig: {
         activeDays: [1, 2, 3, 4, 5], // Seg-Sex
         hoursPerDay: 2,
+      },
+      userProfile: {
+        name: 'Estudante',
+        bio: '',
+        birthDate: '',
+        gender: '',
+        activeMethod: 'Ciclo à Aprovação',
+        avatar: null,
       },
       currentCycleIndex: 0,
       activeTopicId: null,
@@ -303,7 +323,45 @@ export const useStore = create<AppState>()(
         scheduleConfig: { ...state.scheduleConfig, ...config }
       })),
 
+      updateUserProfile: (profile) => set((state) => ({
+        userProfile: { ...state.userProfile, ...profile }
+      })),
+
       setCurrentCycleIndex: (index) => set({ currentCycleIndex: index }),
+
+      resetAllData: () => set({
+        subjects: [],
+        topics: [],
+        questionLogs: [],
+        flashcards: [],
+        simulados: [],
+        studySessions: [],
+        editalInfo: {
+          carreira: '',
+          cargo: '',
+          banca: '',
+          remuneracao: '',
+          vagas: '',
+          periodoInscricao: '',
+          valorInscricao: '',
+          siteConcurso: '',
+          dataProva: '',
+        },
+        scheduleConfig: {
+          activeDays: [1, 2, 3, 4, 5],
+          hoursPerDay: 2,
+        },
+        userProfile: {
+          name: 'Estudante',
+          bio: '',
+          birthDate: '',
+          gender: '',
+          activeMethod: 'Ciclo à Aprovação',
+          avatar: null,
+        },
+        currentCycleIndex: 0,
+        activeTopicId: null,
+      }),
     }),
     {
       name: 'engine-aprovacao-storage',
