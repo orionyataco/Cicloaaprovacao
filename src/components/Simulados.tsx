@@ -3,7 +3,7 @@ import { useStore } from '@/store';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, AlertTriangle, Trash2, BrainCircuit } from 'lucide-react';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { cn } from '@/lib/utils';
 
 interface GeneratedQuestion {
@@ -21,7 +21,7 @@ export function Simulados() {
   const [name, setName] = useState('');
   const [score, setScore] = useState('');
   const [total, setTotal] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string|null>(null);
   const [convertedToFlashcard, setConvertedToFlashcard] = useState<Record<number, boolean>>({});
 
   // AI Generation State
@@ -30,10 +30,10 @@ export function Simulados() {
   const [isGenerating, setIsGenerating] = useState(false);
   
   // Active Exam State
-  const [activeExam, setActiveExam] = useState<GeneratedQuestion[] | null>(null);
+  const [activeExam, setActiveExam] = useState<GeneratedQuestion[]|null>(null);
   const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
   const [examFinished, setExamFinished] = useState(false);
-  const [examStartTime, setExamStartTime] = useState<number | null>(null);
+  const [examStartTime, setExamStartTime] = useState<number|null>(null);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,12 +68,23 @@ export function Simulados() {
 
     setIsGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        alert('API Key do Gemini não configurada.');
+        setIsGenerating(false);
+        return;
+      }
+
+      const genAI = new GoogleGenerativeAI(apiKey);
+      // Usando o apelido dinâmico para garantir o modelo mais potente e disponível
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-flash-latest",
+        generationConfig: { responseMimeType: "application/json" }
+      });
       
       const isCespe = editalInfo.banca.toLowerCase().includes('cespe') || editalInfo.banca.toLowerCase().includes('cebraspe');
       const numOptions = isCespe ? 2 : 5;
       const optionsDesc = isCespe ? 'Exatamente 2 alternativas (Certo/Errado)' : 'Exatamente 5 alternativas';
-      const correctIndexDesc = isCespe ? `Índice da alternativa correta (0 a ${numOptions - 1})` : 'Índice da alternativa correta (0 a 4)';
       const promptType = isCespe ? 'Certo/Errado (2 alternativas)' : 'múltipla escolha (5 alternativas)';
 
       const subjectsWithTopics = subjects
@@ -84,39 +95,31 @@ export function Simulados() {
           topicos_base: topics.filter(t => t.subjectId === s.id).map(t => t.name)
         }));
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
-        contents: `Gere um simulado de ${promptType} focado em concursos públicos para a banca ${editalInfo.banca || 'padrão'}.
-Distribuição solicitada:
+      console.log('Gerando simulado com Gemini 1.5 Pro (SDK Estável)...');
+      
+      const prompt = `Gere um simulado de ${promptType} focado em concursos públicos para a banca ${editalInfo.banca || 'padrão'}.
+Distribuição solicitada de questões:
 ${JSON.stringify(subjectsWithTopics, null, 2)}
 
-Crie questões desafiadoras, focadas nos tópicos listados para cada disciplina. Retorne APENAS um JSON válido seguindo o schema.`,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                subject: { type: Type.STRING, description: 'Nome da disciplina' },
-                topic: { type: Type.STRING, description: 'Tópico abordado' },
-                text: { type: Type.STRING, description: 'Enunciado da questão' },
-                options: { 
-                  type: Type.ARRAY, 
-                  items: { type: Type.STRING },
-                  description: optionsDesc
-                },
-                correctIndex: { type: Type.INTEGER, description: correctIndexDesc },
-                explanation: { type: Type.STRING, description: 'Explicação detalhada da resposta' }
-              },
-              required: ['subject', 'topic', 'text', 'options', 'correctIndex', 'explanation']
-            }
-          }
-        }
-      });
+Crie questões desafiadoras, focadas nos tópicos listados para cada disciplina.
+RETORNE UM JSON NO FORMATO:
+[
+  {
+    "subject": "Nome da disciplina",
+    "topic": "Tópico abordado",
+    "text": "Enunciado da questão",
+    "options": ["Opção A", "Opção B", ...],
+    "correctIndex": 0,
+    "explanation": "Explicação detalhada"
+  }
+]`;
 
-      if (response.text) {
-        const cleanText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const responseText = response.text();
+
+      if (responseText) {
+        const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         const generatedQuestions = JSON.parse(cleanText) as GeneratedQuestion[];
         
         setActiveExam(generatedQuestions);
@@ -124,10 +127,15 @@ Crie questões desafiadoras, focadas nos tópicos listados para cada disciplina.
         setExamFinished(false);
         setExamStartTime(Date.now());
         setIsGeneratingModalOpen(false);
+      } else {
+        throw new Error('Resposta vazia da IA');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao gerar simulado:', error);
-      alert('Erro ao gerar o simulado. Tente novamente.');
+      let errorMsg = 'Erro ao gerar o simulado.';
+      if (error.message?.includes('429')) errorMsg = 'Limite de uso da IA excedido. Tente novamente em um minuto.';
+      else if (error.message?.includes('403')) errorMsg = 'Erro de autenticação com a chave da API.';
+      alert(`${errorMsg} Tente novamente.`);
     } finally {
       setIsGenerating(false);
     }

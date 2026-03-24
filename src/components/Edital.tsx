@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useStore, TopicStatus, EditalInfo } from '@/store';
 import { Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, FileText, RefreshCw, Upload, Loader2, Trash2, AlertTriangle, Edit2, Save, X, Info, ExternalLink, CalendarDays, CalendarClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Ciclo } from './Ciclo';
 import { Cronograma } from './Cronograma';
 
@@ -44,8 +44,8 @@ export function Edital() {
       return;
     }
 
-    if (file.size > 20 * 1024 * 1024) { // 20MB limit
-      showToast('O arquivo é muito grande (máximo 20MB). Para editais maiores, tente separar as páginas do conteúdo programático.', 'error');
+    if (file.size > 15 * 1024 * 1024) { // 15MB limit (base64 will be ~20MB)
+      showToast('O arquivo é muito grande (máximo 15MB).', 'error');
       return;
     }
 
@@ -55,63 +55,72 @@ export function Edital() {
       reader.onloadend = async () => {
         try {
           const base64String = (reader.result as string).split(',')[1];
-          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
-
-          const response = await ai.models.generateContent({
-            model: 'gemini-3.1-pro-preview',
-            contents: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: 'application/pdf',
-                    data: base64String
-                  }
-                },
-                {
-                  text: 'Você é um especialista em concursos públicos. Analise este edital em anexo e encontre a seção de "CONTEÚDO PROGRAMÁTICO" ou "CONHECIMENTOS EXIGIDOS". Extraia as disciplinas e seus respectivos assuntos. DIRETRIZES: 1. Ignore agrupadores genéricos como "Conhecimentos Básicos" e use o nome real da matéria (ex: Língua Portuguesa, Informática). 2. Quebre os assuntos em tópicos menores e diretos. Se estiverem separados por vírgula, ponto e vírgula ou números, separe-os em itens distintos no array de tópicos. Retorne no formato JSON solicitado.'
-                }
-              ]
-            },
-            config: {
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  disciplinas: {
-                    type: Type.ARRAY,
-                    description: 'Lista de disciplinas e seus tópicos extraídos do edital',
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        subject: { type: Type.STRING, description: 'Nome da disciplina. Ex: Língua Portuguesa' },
-                        topics: {
-                          type: Type.ARRAY,
-                          items: { type: Type.STRING },
-                          description: 'Lista de assuntos detalhados e separados da disciplina'
-                        }
-                      },
-                      required: ['subject', 'topics']
-                    }
-                  }
-                },
-                required: ['disciplinas']
-              }
+          const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+          
+          if (!apiKey) {
+            showToast('API Key do Gemini não configurada.', 'error');
+            setIsUploading(false);
+            return;
+          }
+          const genAI = new GoogleGenerativeAI(apiKey);
+          // Usando o apelido 'gemini-flash-latest' para melhor distribuição de quota na conta gratuita
+          const model = genAI.getGenerativeModel(
+            { 
+              model: "gemini-flash-latest",
+              generationConfig: { responseMimeType: "application/json" }
             }
-          });
+          );
 
-          if (response.text) {
-            const cleanText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+          console.log(`Iniciando análise com Gemini 2.0. Arquivo: ${file.name}`);
+          
+          const prompt = `Você é um especialista em estruturação de editais de concursos (Verticalização de Edital). Analise o PDF em anexo e extraia rigorosamente o "CONTEÚDO PROGRAMÁTICO".
+
+Retorne um objeto JSON seguindo EXATAMENTE este formato:
+{
+  "disciplinas": [
+    {
+      "subject": "Nome da Matéria",
+      "topics": ["Tópico 1", "Tópico 2"]
+    }
+  ]
+}
+
+REGRAS DE VERTICALIZAÇÃO:
+1. Decomponha tópicos compostos (separados por vírgula, ponto ou ponto-e-vírgula) em itens individuais.
+2. Remova números de itens e referências burocráticas da banca. 
+3. Mantenha apenas o nome direto do assunto.`;
+
+          const result = await model.generateContent([
+            {
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: base64String
+              }
+            },
+            {
+              text: prompt
+            }
+          ]);
+
+          const response = await result.response;
+          const responseText = response.text();
+
+          if (responseText) {
+            const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
             const data = JSON.parse(cleanText);
-            if (data.disciplinas && Array.isArray(data.disciplinas) && data.disciplinas.length > 0) {
+            
+            if (data.disciplinas && Array.isArray(data.disciplinas)) {
               importEdital(data.disciplinas);
               showToast('Edital importado com sucesso!', 'success');
             } else {
-              showToast('Não foi possível encontrar o conteúdo programático no PDF.', 'error');
+              showToast('Não foi possível extrair o conteúdo programático deste PDF.', 'error');
             }
+          } else {
+            throw new Error('A IA não retornou texto.');
           }
-        } catch (err) {
-          console.error('Erro ao processar com Gemini:', err);
-          showToast('Erro ao processar o edital. O arquivo pode ser muito grande ou ilegível.', 'error');
+        } catch (err: any) {
+          console.error('ERRO SDK:', err);
+          showToast(`Erro ao processar PDF: ${err.message || 'Erro desconhecido'}`, 'error');
         } finally {
           setIsUploading(false);
           if (fileInputRef.current) fileInputRef.current.value = '';
