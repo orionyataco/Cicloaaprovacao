@@ -186,6 +186,11 @@ export const useStore = create<AppState>()(
 
       updateTopicStatus: (id, status) => set((state) => {
         const now = new Date().toISOString();
+        const topic = state.topics.find(t => t.id === id);
+        // Avança o ciclo quando um tópico sai de NOT_READ (ex: marcou "Teoria Concluída")
+        // Isso garante que o próximo slot do ciclo será de uma matéria diferente
+        const shouldAdvanceCycle = topic && topic.status === 'NOT_READ' && status !== 'NOT_READ';
+
         return {
           topics: state.topics.map((t) => {
             if (t.id === id) {
@@ -202,6 +207,10 @@ export const useStore = create<AppState>()(
             }
             return t;
           }),
+          // Avança para a próxima matéria no ciclo
+          currentCycleIndex: shouldAdvanceCycle
+            ? (state.currentCycleIndex + 1) % (state.subjects.length || 1)
+            : state.currentCycleIndex,
         };
       }),
 

@@ -44,20 +44,49 @@ export function Ciclo() {
     .map(t => topics.find(topic => topic.id === t.id)!);
 
   // Calculate subjects and their pending topics for today based on cycle
+  // IMPORTANTE: O ciclo distribui matérias DIFERENTES a cada slot.
+  // Ao concluir um assunto, o próximo slot será de outra matéria (round-robin).
   const dayOfWeek = getDay(today);
   const isActiveToday = scheduleConfig.activeDays.includes(dayOfWeek);
   const hoursPerActiveDay = scheduleConfig.hoursPerDay;
 
-  const cycleData = [];
+  const cycleData: { subject: typeof subjects[0]; topic: typeof topics[0] | undefined }[] = [];
   if (isActiveToday && subjects.length > 0) {
-    for (let i = 0; i < hoursPerActiveDay; i++) {
-      const subject = subjects[(currentCycleIndex + i) % subjects.length];
-      if (subject) {
+    // Filtra matérias que ainda têm tópicos pendentes (NOT_READ)
+    const subjectsWithPending = subjects.filter(s =>
+      topics.some(t => t.subjectId === s.id && t.status === 'NOT_READ')
+    );
+
+    if (subjectsWithPending.length > 0) {
+      const usedSubjectIds = new Set<string>();
+      let pointer = currentCycleIndex % subjects.length;
+      let attempts = 0;
+      const maxAttempts = subjects.length * hoursPerActiveDay; // evitar loop infinito
+
+      while (cycleData.length < hoursPerActiveDay && attempts < maxAttempts) {
+        const subject = subjects[pointer % subjects.length];
+        pointer++;
+        attempts++;
+
+        // Pula matérias já adicionadas neste round (garante variedade)
+        // Só permite repetir quando todas as matérias com pendências já apareceram
+        if (usedSubjectIds.has(subject.id) && usedSubjectIds.size < subjectsWithPending.length) {
+          continue;
+        }
+
+        // Pula matérias sem tópicos pendentes
         const firstPendingTopic = topics.find(t => t.subjectId === subject.id && t.status === 'NOT_READ');
-        cycleData.push({
-          subject,
-          topic: firstPendingTopic
-        });
+        if (!firstPendingTopic) {
+          continue;
+        }
+
+        cycleData.push({ subject, topic: firstPendingTopic });
+        usedSubjectIds.add(subject.id);
+
+        // Se todas as matérias com pendências já foram usadas, reseta para permitir repetições
+        if (usedSubjectIds.size >= subjectsWithPending.length) {
+          usedSubjectIds.clear();
+        }
       }
     }
   }
