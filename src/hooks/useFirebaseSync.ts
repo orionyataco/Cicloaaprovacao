@@ -129,6 +129,7 @@ export function useFirebaseSync() {
           await setDoc(profileRef, {
             uid: user.uid,
             name: store.userProfile.name,
+            searchName: store.userProfile.name.toLowerCase(), // Facilitar busca case-insensitive
             username: store.userProfile.username.toLowerCase(),
             bio: store.userProfile.bio,
             avatar: store.userProfile.avatar,

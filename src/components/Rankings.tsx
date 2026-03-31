@@ -103,11 +103,11 @@ export function Rankings() {
         limit(5)
       );
       
-      // Busca por nome (exato ou prefixo)
+      // Busca por nome (usando searchName que é sempre minúsculo)
       const qName = query(
         collection(db, 'profiles'), 
-        where('name', '>=', cleanQuery), 
-        where('name', '<=', cleanQuery + '\uf8ff'),
+        where('searchName', '>=', cleanQuery.toLowerCase()), 
+        where('searchName', '<=', cleanQuery.toLowerCase() + '\uf8ff'),
         limit(5)
       );
 
@@ -124,9 +124,32 @@ export function Rankings() {
       }
     } catch (err) {
       console.error('Erro na busca:', err);
-      alert('Erro ao conectar com o banco de dados.');
+      alert('Erro ao conectar com o banco de dados. Verifique suas regras do Firestore.');
     } finally {
       setIsSearching(false);
+    }
+  };
+
+  // Helper para o card do próprio usuário
+  const myPublicProfile: PublicProfile = {
+    uid: auth.currentUser?.uid || '',
+    name: userProfile.name,
+    username: userProfile.username,
+    bio: userProfile.bio,
+    avatar: userProfile.avatar,
+    editalInfo: {
+      carreira: useStore.getState().editalInfo.carreira,
+      cargo: useStore.getState().editalInfo.cargo,
+      banca: useStore.getState().editalInfo.banca,
+    },
+    stats: {
+      totalQuestions: useStore.getState().questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0) + 
+                     useStore.getState().simulados.filter(s => s.type === 'manual').reduce((acc, curr) => acc + curr.total, 0),
+      totalCorrect: useStore.getState().questionLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0) +
+                   useStore.getState().simulados.filter(s => s.type === 'manual').reduce((acc, curr) => acc + curr.score, 0),
+      totalStudySeconds: useStore.getState().studySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0),
+      completedTheories: useStore.getState().topics.filter(t => t.status !== 'NOT_READ').length,
+      totalTopics: useStore.getState().topics.length
     }
   };
 
@@ -172,7 +195,7 @@ export function Rankings() {
             </form>
 
             {searchResults.length > 0 && (
-              <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 border-t border-zinc-800 pt-4">
+              <div className="mt-6 space-y-3 animate-in slide-in-from-top-2 border-t border-zinc-800 pt-6">
                 <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Resultados da Busca</p>
                 {searchResults.map(profile => (
                   <div key={profile.uid} className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-xl border border-zinc-800">
@@ -201,6 +224,22 @@ export function Rankings() {
                 ))}
               </div>
             )}
+
+            <div className="mt-8 pt-6 border-t border-zinc-800/50">
+               <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4">Seu Perfil Público</p>
+               <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-zinc-800 border border-emerald-500/20 overflow-hidden">
+                       {myPublicProfile.avatar ? <img src={myPublicProfile.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-emerald-400">{myPublicProfile.name}</div>
+                      <div className="text-[10px] text-zinc-500 italic">@{myPublicProfile.username || 'Sem apelido'}</div>
+                    </div>
+                  </div>
+                  <button onClick={() => setSelectedUser(myPublicProfile)} className="text-[10px] text-zinc-400 hover:bg-zinc-800 px-2 py-1 rounded transition-colors">Ver como outros vêem</button>
+               </div>
+            </div>
           </section>
 
           <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
