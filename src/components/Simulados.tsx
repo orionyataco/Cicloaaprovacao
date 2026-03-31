@@ -23,6 +23,8 @@ export function Simulados() {
   const [total, setTotal] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string|null>(null);
   const [convertedToFlashcard, setConvertedToFlashcard] = useState<Record<number, boolean>>({});
+  const [showSubjectBreakdown, setShowSubjectBreakdown] = useState(false);
+  const [manualSubjectScores, setManualSubjectScores] = useState<Record<string, { correct: string, total: string }>>({});
 
   // AI Generation State
   const [isGeneratingModalOpen, setIsGeneratingModalOpen] = useState(false);
@@ -46,10 +48,31 @@ export function Simulados() {
       date: new Date().toISOString(),
       type: 'manual'
     });
+
+    // Se houver breakdown por matéria, adiciona ao questionLog para refletir nos relatórios
+    if (showSubjectBreakdown) {
+      Object.entries(manualSubjectScores).forEach(([subjectId, results]) => {
+        const res = results as { correct: string, total: string };
+        if (res.correct && res.total) {
+          // Encontra o primeiro tópico da matéria para atribuir os acertos
+          const firstTopic = topics.find(t => t.subjectId === subjectId);
+          if (firstTopic) {
+            addQuestionLog({
+              topicId: firstTopic.id,
+              totalQuestions: Number(res.total),
+              correctAnswers: Number(res.correct),
+              errorReason: 'NONE'
+            });
+          }
+        }
+      });
+    }
     
     setName('');
     setScore('');
     setTotal('');
+    setManualSubjectScores({});
+    setShowSubjectBreakdown(false);
     setIsAdding(false);
   };
 
@@ -102,11 +125,13 @@ Distribuição solicitada de questões:
 ${JSON.stringify(subjectsWithTopics, null, 2)}
 
 Crie questões desafiadoras, focadas nos tópicos listados para cada disciplina.
+IMPORTANTE: Utilize PRIORITARIAMENTE os nomes de disciplinas e tópicos exatamente como fornecidos no JSON acima para os campos "subject" e "topic".
+
 RETORNE UM JSON NO FORMATO:
 [
   {
-    "subject": "Nome da disciplina",
-    "topic": "Tópico abordado",
+    "subject": "Nome da disciplina (exatamente como fornecido)",
+    "topic": "Tópico abordado (exatamente como fornecido)",
     "text": "Enunciado da questão",
     "options": ["Opção A", "Opção B", ...],
     "correctIndex": 0,
@@ -154,9 +179,29 @@ RETORNE UM JSON NO FORMATO:
       }
 
       // Track by topic for question logs
-      const subject = subjects.find(s => s.name === q.subject);
+      // Busca a matéria de forma robusta (case-insensitive e trim)
+      const subject = subjects.find(s => 
+        s.name.trim().toLowerCase() === q.subject.trim().toLowerCase() ||
+        s.name.toLowerCase().includes(q.subject.toLowerCase()) ||
+        q.subject.toLowerCase().includes(s.name.toLowerCase())
+      );
+
       if (subject) {
-        const topic = topics.find(t => t.subjectId === subject.id && t.name === q.topic);
+        // Busca o tópico dentro da matéria de forma robusta
+        let topic = topics.find(t => 
+          t.subjectId === subject.id && (
+            t.name.trim().toLowerCase() === q.topic.trim().toLowerCase() ||
+            t.name.toLowerCase().includes(q.topic.toLowerCase()) ||
+            q.topic.toLowerCase().includes(t.name.toLowerCase())
+          )
+        );
+
+        // Se não encontrar o tópico específico, atribui ao primeiro tópico da matéria
+        // para garantir que o progresso seja contabilizado no dashboard
+        if (!topic) {
+          topic = topics.find(t => t.subjectId === subject.id);
+        }
+
         if (topic) {
           if (!subjectResults[topic.id]) {
             subjectResults[topic.id] = { total: 0, correct: 0 };
@@ -471,7 +516,61 @@ RETORNE UM JSON NO FORMATO:
               />
             </div>
           </div>
-          <div className="flex justify-end">
+
+          <div className="bg-zinc-800/50 p-4 rounded-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Brain className="w-4 h-4 text-blue-400" />
+                <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-widest">Desempenho por Matéria (Opcional)</h3>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowSubjectBreakdown(!showSubjectBreakdown)}
+                className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+              >
+                {showSubjectBreakdown ? 'Ocultar Detalhes' : 'Detalhar por Matéria'}
+              </button>
+            </div>
+            <p className="text-[10px] text-zinc-500">Ao detalhar por matéria, esses resultados serão refletidos nos seus Relatórios de Performance.</p>
+            
+            {showSubjectBreakdown && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+                {subjects.map(subject => (
+                  <div key={subject.id} className="flex items-center justify-between gap-4 p-3 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subject.color }} />
+                      <span className="text-xs text-zinc-300 truncate">{subject.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="number" 
+                        placeholder="Hits"
+                        value={manualSubjectScores[subject.id]?.correct || ''}
+                        onChange={(e) => setManualSubjectScores(prev => ({ 
+                          ...prev, 
+                          [subject.id]: { ...prev[subject.id], correct: e.target.value, total: prev[subject.id]?.total || '10' } 
+                        }))}
+                        className="w-12 bg-zinc-950 border border-zinc-800 text-zinc-200 rounded px-2 py-1 text-xs text-center"
+                      />
+                      <span className="text-zinc-600">/</span>
+                      <input 
+                        type="number" 
+                        placeholder="Total"
+                        value={manualSubjectScores[subject.id]?.total || ''}
+                        onChange={(e) => setManualSubjectScores(prev => ({ 
+                          ...prev, 
+                          [subject.id]: { ...prev[subject.id], total: e.target.value } 
+                        }))}
+                        className="w-12 bg-zinc-950 border border-zinc-800 text-zinc-200 rounded px-2 py-1 text-xs text-center"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2">
             <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-medium transition-colors">
               Salvar
             </button>

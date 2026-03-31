@@ -40,15 +40,18 @@ export function useFirebaseSync() {
               editalInfo: remoteData.editalInfo ?? useStore.getState().editalInfo,
               scheduleConfig: remoteData.scheduleConfig ?? useStore.getState().scheduleConfig,
               userProfile: remoteData.userProfile ?? useStore.getState().userProfile,
+              followingIds: remoteData.followingIds ?? [],
               currentCycleIndex: remoteData.currentCycleIndex ?? 0,
               activeTopicId: remoteData.activeTopicId ?? null,
               isAuthenticated: true,
             });
             console.log('[Firebase] Dados carregados do Firestore.');
           } else {
-            // Usuário novo — apenas marca como autenticado
+            // Usuário novo — Garante que o estado local esteja limpo antes de logar
+            // para evitar herdar dados do localStorage de outro usuário
+            useStore.getState().resetAllData();
             useStore.getState().login();
-            console.log('[Firebase] Novo usuário, nenhum dado no Firestore ainda.');
+            console.log('[Firebase] Novo usuário, estado resetado e logado.');
           }
         } catch (error) {
           console.error('[Firebase] Erro ao carregar dados:', error);
@@ -65,7 +68,8 @@ export function useFirebaseSync() {
         isHydrating.current = false;
         hasHydrated.current = false;
         useStore.getState().logout();
-        console.log('[Firebase] Usuário deslogado.');
+        useStore.getState().resetAllData();
+        console.log('[Firebase] Usuário deslogado e estado local resetado.');
       }
     });
 
@@ -91,6 +95,7 @@ export function useFirebaseSync() {
     debounceTimer.current = setTimeout(async () => {
       try {
         const docRef = doc(db, 'users', user.uid);
+        const profileRef = doc(db, 'profiles', user.uid);
 
         // Extrai apenas os dados (sem as funções/actions)
         const {
@@ -99,12 +104,51 @@ export function useFirebaseSync() {
           addFlashcard, reviewFlashcard, addSimulado, deleteSimulado,
           importEdital, deleteSubject, deleteAllSubjects,
           updateEditalInfo, updateScheduleConfig, updateUserProfile,
-          setCurrentCycleIndex, resetAllData,
+          setCurrentCycleIndex, resetAllData, followUser, unfollowUser,
           ...dataToSave
         } = store;
 
         await setDoc(docRef, dataToSave, { merge: true });
-        console.log('[Firebase] Dados sincronizados com o Firestore.');
+        
+        // ────────────────────────────────────────────────
+        // Public Profiling: Sync basic summary stats
+        // ────────────────────────────────────────────────
+        if (store.userProfile.username) {
+          const totalQuestionsFromLogs = store.questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0);
+          const totalCorrectFromLogs = store.questionLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0);
+          const manualSimulados = store.simulados.filter(s => s.type === 'manual');
+          const totalQuestionsFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.total, 0);
+          const totalCorrectFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.score, 0);
+
+          const totalQuestions = totalQuestionsFromLogs + totalQuestionsFromSimulados;
+          const totalCorrect = totalCorrectFromLogs + totalCorrectFromSimulados;
+          const totalStudySeconds = store.studySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0);
+          const completedTheories = store.topics.filter(t => t.status !== 'NOT_READ').length;
+          const totalTopics = store.topics.length;
+
+          await setDoc(profileRef, {
+            uid: user.uid,
+            name: store.userProfile.name,
+            username: store.userProfile.username.toLowerCase(),
+            bio: store.userProfile.bio,
+            avatar: store.userProfile.avatar,
+            editalInfo: {
+              carreira: store.editalInfo.carreira,
+              cargo: store.editalInfo.cargo,
+              banca: store.editalInfo.banca,
+            },
+            stats: {
+              totalQuestions,
+              totalCorrect,
+              totalStudySeconds,
+              completedTheories,
+              totalTopics,
+              lastUpdate: new Date().toISOString()
+            }
+          }, { merge: true });
+        }
+
+        console.log('[Firebase] Dados sincronizados com o Firestore (privado e público).');
       } catch (error) {
         console.error('[Firebase] Erro ao sincronizar dados:', error);
       }

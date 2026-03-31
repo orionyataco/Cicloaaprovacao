@@ -1,33 +1,39 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Play, Square, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store';
 
 export function Timer() {
   const [isActive, setIsActive] = useState(false);
-  const [seconds, setSeconds] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const startTimeRef = useRef<number | null>(null);
+  const accumulatedRef = useRef(0);
   const { topics, logStudySession, activeTopicId, setActiveTopicId } = useStore();
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (isActive) {
+      startTimeRef.current = Date.now();
       interval = setInterval(() => {
-        setSeconds((s) => s + 1);
-      }, 1000);
+        const now = Date.now();
+        const currentElapsed = Math.floor((now - startTimeRef.current!) / 1000);
+        setElapsedSeconds(accumulatedRef.current + currentElapsed);
+      }, 100); // Atualiza a cada 100ms para display preciso
     }
     return () => clearInterval(interval);
   }, [isActive]);
 
   const toggleTimer = () => {
     if (isActive) {
-      // Stop and log
+      // Ao parar, salva o log e reseta
       if (activeTopicId) {
-        logStudySession(activeTopicId, seconds);
+        logStudySession(activeTopicId, elapsedSeconds);
       }
-      setSeconds(0);
-      // We don't necessarily want to clear the active topic when stopping, 
-      // maybe the user wants to resume or just finished that session.
-      // But the user said "no relógio não faz sentido ter o selecionar tópico".
+      setElapsedSeconds(0);
+      accumulatedRef.current = 0;
+      startTimeRef.current = null;
+    } else {
+      startTimeRef.current = Date.now();
     }
     setIsActive(!isActive);
   };
@@ -45,7 +51,7 @@ export function Timer() {
     <div className="flex items-center gap-2 sm:gap-4 bg-zinc-900 border border-zinc-800 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 shadow-lg">
       <Clock className="w-4 h-4 sm:w-5 h-5 text-zinc-400 hidden xs:block" />
       <div className="font-mono text-base sm:text-xl font-medium text-zinc-100 tracking-wider w-20 sm:w-24 text-center">
-        {formatTime(seconds)}
+        {formatTime(elapsedSeconds)}
       </div>
       
       <div className="text-xs sm:text-sm text-emerald-400 max-w-[80px] sm:max-w-[200px] truncate font-medium">

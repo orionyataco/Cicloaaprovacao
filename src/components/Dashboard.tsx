@@ -2,7 +2,7 @@ import { useStore } from '@/store';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Target, CheckCircle2, Clock } from 'lucide-react';
+import { Target, CheckCircle2, Clock, BookOpen } from 'lucide-react';
 
 export function Dashboard() {
   const { subjects, topics, questionLogs, simulados, studySessions } = useStore();
@@ -19,7 +19,11 @@ export function Dashboard() {
   const totalCorrectAll = totalCorrectFromLogs + totalCorrectFromSimulados;
   
   const totalStudySeconds = studySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0);
-  const totalStudyHours = (totalStudySeconds / 3600).toFixed(1);
+  const hours = Math.floor(totalStudySeconds / 3600);
+  const minutes = Math.floor((totalStudySeconds % 3600) / 60);
+
+  const totalTopics = topics.length;
+  const completedTopicsAll = topics.filter(t => t.status !== 'NOT_READ').length;
 
   // Calculate performance per subject
   const subjectPerformance = subjects.map(subject => {
@@ -52,7 +56,9 @@ export function Dashboard() {
       percentage: Math.round(percentage),
       totalQuestions,
       status,
-      color
+      color,
+      completedTopics: topics.filter(t => t.subjectId === subject.id && t.status !== 'NOT_READ').length,
+      totalSubjectTopics: topics.filter(t => t.subjectId === subject.id).length
     };
   });
 
@@ -69,7 +75,7 @@ export function Dashboard() {
       </header>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 flex items-center gap-4">
           <div className="p-2 sm:p-3 bg-blue-500/10 rounded-xl">
             <Target className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
@@ -96,7 +102,17 @@ export function Dashboard() {
           </div>
           <div>
             <p className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-widest">Horas Estudadas</p>
-            <p className="text-xl sm:text-2xl font-bold text-zinc-100">{totalStudyHours}h</p>
+            <p className="text-xl sm:text-2xl font-bold text-zinc-100">{hours}h {minutes}m</p>
+          </div>
+        </div>
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 flex items-center gap-4">
+          <div className="p-2 sm:p-3 bg-purple-500/10 rounded-xl">
+            <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" />
+          </div>
+          <div>
+            <p className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-widest">Teoria Concluída</p>
+            <p className="text-xl sm:text-2xl font-bold text-zinc-100">{completedTopicsAll}/{totalTopics}</p>
           </div>
         </div>
       </div>
@@ -111,6 +127,7 @@ export function Dashboard() {
                 <div className="flex justify-between text-sm">
                   <span className="text-zinc-300 font-medium">{subject.name}</span>
                   <div className="flex items-center gap-2">
+                    <span className="text-zinc-500 text-[10px] uppercase font-bold mr-2">{subject.completedTopics}/{subject.totalSubjectTopics} temas</span>
                     <span className="text-zinc-400 text-xs">{subject.totalQuestions} questões</span>
                     <span className="font-mono text-zinc-100">{subject.percentage}%</span>
                   </div>

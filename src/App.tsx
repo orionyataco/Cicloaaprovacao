@@ -11,10 +11,11 @@ import { useStore } from './store';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 import { auth } from './lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle, LogOut } from 'lucide-react';
+import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle, LogOut, Users } from 'lucide-react';
+import { Rankings } from './components/Rankings';
 import { cn } from './lib/utils';
 
-type View = 'dashboard' | 'edital' | 'flashcards' | 'simulados' | 'account';
+type View = 'dashboard' | 'edital' | 'flashcards' | 'simulados' | 'account' | 'rankings';
 
 export default function App() {
   useFirebaseSync();
@@ -28,6 +29,7 @@ export default function App() {
     { id: 'edital', label: 'Meu Edital', icon: ListTodo },
     { id: 'simulados', label: 'Simulados', icon: Trophy },
     { id: 'flashcards', label: 'Banco de Flashcards', icon: BrainCircuit },
+    { id: 'rankings', label: 'Rankings e Amigos', icon: Users },
   ] as const;
 
   const handleViewChange = (view: View) => {
@@ -172,6 +174,7 @@ export default function App() {
             {currentView === 'edital' && <Edital />}
             {currentView === 'flashcards' && <Flashcards />}
             {currentView === 'simulados' && <Simulados />}
+            {currentView === 'rankings' && <Rankings />}
             {currentView === 'account' && <Account />}
           </div>
         </div>

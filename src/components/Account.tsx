@@ -1,36 +1,105 @@
 import React, { useState, useRef } from 'react';
 import { useStore } from '@/store';
-import { User, Trash2, Save, AlertTriangle, ShieldCheck, Camera, X as CloseIcon } from 'lucide-react';
+import { User, Trash2, Save, AlertTriangle, ShieldCheck, Camera, X as CloseIcon, Loader2 } from 'lucide-react';
+import { storage, auth, db } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { doc, deleteDoc } from 'firebase/firestore';
 
 export function Account() {
   const { userProfile, updateUserProfile, resetAllData } = useStore();
   const [formData, setFormData] = useState(userProfile);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSave = () => {
-    updateUserProfile(formData);
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateUserProfile(formData);
+      alert('Perfil atualizado com sucesso!');
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao atualizar perfil.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleReset = () => {
+  const deleteOldAvatar = async () => {
+    if (userProfile.avatar && userProfile.avatar.includes('firebasestorage')) {
+      try {
+        const oldRef = ref(storage, userProfile.avatar);
+        await deleteObject(oldRef);
+      } catch (err) {
+        console.warn('Erro ao deletar avatar antigo:', err);
+      }
+    }
+  };
+
+  const handleReset = async () => {
+    const user = auth.currentUser;
+    if (user) {
+      // 1. Apagar arquivos do Storage (Avatar)
+      await deleteOldAvatar();
+
+      // 2. Apagar documento do Firestore para limpar o banco
+      try {
+        const docRef = doc(db, 'users', user.uid);
+        await deleteDoc(docRef);
+      } catch (err) {
+        console.error('Erro ao deletar documento do Firestore:', err);
+      }
+    }
+
+    // 3. Resetar estado local
     resetAllData();
     setShowResetConfirm(false);
-    window.location.reload();
+    
+    // Pequeno delay para garantir que o sync perceba o reset (se houver algum listener sobrando)
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const user = auth.currentUser;
+    if (!user) return;
+
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      if (file.size > 5 * 1024 * 1024) {
         alert('A imagem deve ter no máximo 5MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({ ...formData, avatar: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      
+      setUploadingAvatar(true);
+      try {
+        // 1. Remover avatar antigo se existir no storage
+        await deleteOldAvatar();
+
+        // 2. Upload para Firebase Storage em pastas por usuário
+        const avatarRef = ref(storage, `avatars/${user.uid}/${Date.now()}_${file.name}`);
+        const snapshot = await uploadBytes(avatarRef, file);
+        const downloadURL = await getDownloadURL(snapshot.ref);
+
+        // 3. Atualizar estado com a URL do storage em vez do Base64
+        setFormData({ ...formData, avatar: downloadURL });
+        // Já salva direto para o usuário não perder se fechar o app
+        updateUserProfile({ ...formData, avatar: downloadURL });
+      } catch (err) {
+        console.error('Erro no upload:', err);
+        alert('Falha ao subir imagem para o servidor.');
+      } finally {
+        setUploadingAvatar(false);
+      }
     }
+  };
+
+  const removeAvatar = async () => {
+    await deleteOldAvatar();
+    setFormData({ ...formData, avatar: null });
+    updateUserProfile({ ...formData, avatar: null });
   };
 
   return (
@@ -53,7 +122,9 @@ export function Account() {
             <div className="flex flex-col sm:flex-row items-center gap-6 pb-4">
               <div className="relative group">
                 <div className="w-24 h-24 rounded-full bg-zinc-950 border-2 border-zinc-800 overflow-hidden flex items-center justify-center">
-                  {formData.avatar ? (
+                  {uploadingAvatar ? (
+                    <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                  ) : formData.avatar ? (
                     <img src={formData.avatar} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   ) : (
                     <User className="w-10 h-10 text-zinc-700" />
@@ -69,6 +140,7 @@ export function Account() {
                   type="file" 
                   ref={fileInputRef} 
                   onChange={handleFileChange} 
+                  disabled={uploadingAvatar}
                   accept="image/*" 
                   className="hidden" 
                 />
@@ -78,8 +150,9 @@ export function Account() {
                 <p className="text-xs text-zinc-500 mt-1">PNG, JPG ou WEBP. Máximo de 5MB.</p>
                 {formData.avatar && (
                   <button 
-                    onClick={() => setFormData({ ...formData, avatar: null })}
-                    className="text-xs text-red-500 hover:text-red-400 mt-2 font-medium flex items-center gap-1 mx-auto sm:mx-0"
+                    onClick={removeAvatar}
+                    className="text-xs text-red-500 hover:text-red-400 mt-2 font-medium flex items-center gap-1 mx-auto sm:mx-0 disabled:opacity-50"
+                    disabled={uploadingAvatar}
                   >
                     <CloseIcon className="w-3 h-3" /> Remover foto
                   </button>
@@ -89,7 +162,21 @@ export function Account() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Nome do Usuário</label>
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Nome do Usuário (Busca)</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 font-bold">@</span>
+                  <input
+                    type="text"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value.replace(/[^a-zA-Z0-0_]/g, '').toLowerCase() })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                    placeholder="ex: joao_concursos"
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-600">Este nome será usado para ser encontrado por amigos.</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Nome de Exibição</label>
                 <input
                   type="text"
                   value={formData.name}
@@ -146,10 +233,11 @@ export function Account() {
             <div className="flex justify-end pt-4">
               <button
                 onClick={handleSave}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-semibold transition-all shadow-lg shadow-blue-900/20 active:scale-95"
+                disabled={isSaving || uploadingAvatar}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white px-6 py-2 rounded-xl font-semibold transition-all shadow-lg shadow-blue-900/20 active:scale-95"
               >
-                <Save className="w-4 h-4" />
-                Salvar Alterações
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {isSaving ? 'Salvando...' : 'Salvar Alterações'}
               </button>
             </div>
           </div>

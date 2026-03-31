@@ -75,6 +75,7 @@ export interface StudySession {
 
 export interface UserProfile {
   name: string;
+  username: string; // Adicionado para busca de amigos
   bio: string;
   birthDate: string;
   gender: string;
@@ -94,6 +95,7 @@ interface AppState {
   userProfile: UserProfile;
   currentCycleIndex: number;
   activeTopicId: string | null;
+  followingIds: string[]; // Lista de UIDs de amigos seguidos
   isAuthenticated: boolean;
 
   // Actions
@@ -116,6 +118,8 @@ interface AppState {
   updateScheduleConfig: (config: Partial<ScheduleConfig>) => void;
   updateUserProfile: (profile: Partial<UserProfile>) => void;
   setCurrentCycleIndex: (index: number) => void;
+  followUser: (uid: string) => void;
+  unfollowUser: (uid: string) => void;
   resetAllData: () => void;
 }
 
@@ -163,6 +167,7 @@ export const useStore = create<AppState>()(
       },
       userProfile: {
         name: 'Estudante',
+        username: '', // Inicialmente vazio
         bio: '',
         birthDate: '',
         gender: '',
@@ -170,6 +175,7 @@ export const useStore = create<AppState>()(
         avatar: null,
       },
       currentCycleIndex: 0,
+      followingIds: [],
       activeTopicId: null,
       isAuthenticated: false,
 
@@ -345,6 +351,14 @@ export const useStore = create<AppState>()(
 
       setCurrentCycleIndex: (index) => set({ currentCycleIndex: index }),
 
+      followUser: (uid) => set((state) => ({ 
+        followingIds: state.followingIds.includes(uid) ? state.followingIds : [...state.followingIds, uid] 
+      })),
+
+      unfollowUser: (uid) => set((state) => ({ 
+        followingIds: state.followingIds.filter(id => id !== uid) 
+      })),
+
       resetAllData: () => set({
         subjects: [],
         topics: [],
@@ -369,6 +383,7 @@ export const useStore = create<AppState>()(
         },
         userProfile: {
           name: 'Estudante',
+          username: '',
           bio: '',
           birthDate: '',
           gender: '',
@@ -376,6 +391,7 @@ export const useStore = create<AppState>()(
           avatar: null,
         },
         currentCycleIndex: 0,
+        followingIds: [],
         activeTopicId: null,
       }),
     }),
