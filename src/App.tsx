@@ -128,10 +128,6 @@ export default function App() {
               </div>
               <div className="min-w-0">
                 <div className="font-semibold text-zinc-200 truncate">{userProfile.name}</div>
-                <div className="flex items-center gap-2 text-[10px] text-zinc-500 mt-1">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  {userProfile.activeMethod}
-                </div>
               </div>
             </div>
           </button>

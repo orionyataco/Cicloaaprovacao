@@ -97,7 +97,6 @@ export interface UserProfile {
   bio: string;
   birthDate: string;
   gender: string;
-  activeMethod: string;
   avatar: string | null;
 }
 
@@ -115,6 +114,9 @@ interface AppState {
   activeTopicId: string | null;
   autoGenerateTopicId: string | null;
   followingIds: string[]; // Lista de UIDs de amigos seguidos
+  weeklyRankingFriendIds: string[]; // Lista de UIDs de amigos para o ranking personalizado
+  customRankingStartDate: string | null;
+  customRankingEndDate: string | null;
   sharedQuestions: SharedQuestion[];
   isAuthenticated: boolean;
 
@@ -141,6 +143,8 @@ interface AppState {
   setCurrentCycleIndex: (index: number) => void;
   followUser: (uid: string) => void;
   unfollowUser: (uid: string) => void;
+  toggleWeeklyRankingFriend: (uid: string) => void;
+  setCustomRankingDates: (start: string | null, end: string | null) => void;
   setSharedQuestions: (questions: SharedQuestion[]) => void;
   resetAllData: () => void;
 }
@@ -193,11 +197,13 @@ export const useStore = create<AppState>()(
         bio: '',
         birthDate: '',
         gender: '',
-        activeMethod: 'Ciclo à Aprovação',
         avatar: null,
       },
       currentCycleIndex: 0,
       followingIds: [],
+      weeklyRankingFriendIds: [],
+      customRankingStartDate: null,
+      customRankingEndDate: null,
       sharedQuestions: [],
       activeTopicId: null,
       autoGenerateTopicId: null,
@@ -403,8 +409,20 @@ export const useStore = create<AppState>()(
       })),
 
       unfollowUser: (uid) => set((state) => ({ 
-        followingIds: state.followingIds.filter(id => id !== uid) 
+        followingIds: state.followingIds.filter(id => id !== uid),
+        weeklyRankingFriendIds: state.weeklyRankingFriendIds.filter(id => id !== uid)
       })),
+
+      toggleWeeklyRankingFriend: (uid) => set((state) => ({
+        weeklyRankingFriendIds: state.weeklyRankingFriendIds.includes(uid)
+          ? state.weeklyRankingFriendIds.filter(id => id !== uid)
+          : [...state.weeklyRankingFriendIds, uid]
+      })),
+
+      setCustomRankingDates: (start, end) => set({
+        customRankingStartDate: start,
+        customRankingEndDate: end
+      }),
       
       setSharedQuestions: (questions) => set({ sharedQuestions: questions }),
 
@@ -436,11 +454,13 @@ export const useStore = create<AppState>()(
           bio: '',
           birthDate: '',
           gender: '',
-          activeMethod: 'Ciclo à Aprovação',
           avatar: null,
         },
         currentCycleIndex: 0,
         followingIds: [],
+        weeklyRankingFriendIds: [],
+        customRankingStartDate: null,
+        customRankingEndDate: null,
         sharedQuestions: [],
         activeTopicId: null,
         autoGenerateTopicId: null,

@@ -208,16 +208,6 @@ export function Account() {
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Método Ativo</label>
-                <input
-                  type="text"
-                  value={formData.activeMethod}
-                  onChange={(e) => setFormData({ ...formData, activeMethod: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                  placeholder="Ex: Ciclo à Aprovação"
-                />
-              </div>
             </div>
 
             <div className="space-y-2">

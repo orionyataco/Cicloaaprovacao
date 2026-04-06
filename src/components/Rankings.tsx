@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
-import { Search, UserPlus, UserMinus, Trophy, Target, Clock, BookOpen, ChevronRight, UserCircle, X, LayoutDashboard, Target as TargetIcon, Globe, Plus } from 'lucide-react';
+import { Search, UserPlus, UserMinus, Trophy, Target, Clock, BookOpen, ChevronRight, UserCircle, X, LayoutDashboard, Target as TargetIcon, Globe, Plus, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { startOfWeek, parseISO } from 'date-fns';
 
 interface PublicProfile {
   uid: string;
@@ -26,23 +27,40 @@ interface PublicProfile {
   editalStructure?: { subject: string, topics: string[] }[];
 }
 
-type RankingMetric = 'totalQuestions' | 'totalCorrect' | 'totalStudySeconds' | 'completedTheories';
+type RankingMetric = 'proficiency' | 'totalStudySeconds' | 'completedTheories';
 
 export function Rankings() {
-  const { followingIds, followUser, unfollowUser, userProfile, importEdital } = useStore();
+  const { 
+    followingIds, 
+    weeklyRankingFriendIds, 
+    toggleWeeklyRankingFriend, 
+    followUser, 
+    unfollowUser, 
+    userProfile, 
+    importEdital,
+    customRankingStartDate,
+    customRankingEndDate,
+    setCustomRankingDates
+  } = useStore();
   
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'social' | 'weekly'>('social');
   const [searchResults, setSearchResults] = useState<PublicProfile[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   
   const [friendsProfiles, setFriendsProfiles] = useState<PublicProfile[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
   
+  const [activeRankingTab, setActiveRankingTab] = useState<RankingMetric>('proficiency');
+  const [activeWeeklyMetric, setActiveWeeklyMetric] = useState<'studySeconds' | 'proficiency'>('studySeconds');
+
+  const [weeklyProfiles, setWeeklyProfiles] = useState<PublicProfile[]>([]);
+  const [isLoadingWeekly, setIsLoadingWeekly] = useState(false);
+
   const [globalTop, setGlobalTop] = useState<PublicProfile[]>([]);
   const [loadingGlobal, setLoadingGlobal] = useState(false);
-  
+
   const [selectedUser, setSelectedUser] = useState<PublicProfile | null>(null);
-  const [activeRankingTab, setActiveRankingTab] = useState<RankingMetric>('totalQuestions');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch profiles of users we follow
   useEffect(() => {
@@ -51,7 +69,6 @@ export function Rankings() {
         setFriendsProfiles([]);
         return;
       }
-      
       setIsLoadingFriends(true);
       try {
         const q = query(collection(db, 'profiles'), where('uid', 'in', followingIds));
@@ -64,9 +81,32 @@ export function Rankings() {
         setIsLoadingFriends(false);
       }
     };
-
     fetchFriends();
   }, [followingIds]);
+
+  // Fetch profiles for custom weekly ranking
+  useEffect(() => {
+    const fetchWeekly = async () => {
+      if (weeklyRankingFriendIds.length === 0) {
+        setWeeklyProfiles([]);
+        return;
+      }
+      
+      setIsLoadingWeekly(true);
+      try {
+        const q = query(collection(db, 'profiles'), where('uid', 'in', weeklyRankingFriendIds));
+        const snap = await getDocs(q);
+        const profiles = snap.docs.map(doc => doc.data() as any);
+        setWeeklyProfiles(profiles);
+      } catch (err) {
+        console.error('Erro ao buscar ranking semanal:', err);
+      } finally {
+        setIsLoadingWeekly(false);
+      }
+    };
+
+    fetchWeekly();
+  }, [weeklyRankingFriendIds]);
 
   // Fetch Global Top 5 to show active users
   useEffect(() => {
@@ -164,7 +204,58 @@ export function Rankings() {
     if (myPublicProfile.uid && !all.some(p => p.uid === myPublicProfile.uid)) {
       all.push(myPublicProfile);
     }
-    return all.sort((a, b) => (b.stats[metric] || 0) - (a.stats[metric] || 0));
+    return all.sort((a, b) => {
+      if (metric === 'proficiency') {
+        const profA = a.stats.totalQuestions > 0 ? (a.stats.totalCorrect / a.stats.totalQuestions) * 100 : 0;
+        const profB = b.stats.totalQuestions > 0 ? (b.stats.totalCorrect / b.stats.totalQuestions) * 100 : 0;
+        return profB - profA;
+      }
+      return ((b.stats as any)[metric] || 0) - ((a.stats as any)[metric] || 0);
+    });
+  };
+
+  const getSortedWeeklyRanking = () => {
+    const all = [...weeklyProfiles];
+    
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const rankingStart = customRankingStartDate ? parseISO(customRankingStartDate) : weekStart;
+    const rankingEnd = customRankingEndDate ? parseISO(customRankingEndDate) : null;
+    
+    // Helper para filtrar os logs pelas datas
+    const sumStat = (list: any[], dateField: string, valueField: string | ((curr: any) => number)) => {
+       return list.reduce((acc, curr) => {
+         const t = parseISO(curr[dateField]).getTime();
+         if (t >= rankingStart.getTime() && (!rankingEnd || t <= rankingEnd.getTime())) {
+            return acc + (typeof valueField === 'function' ? valueField(curr) : curr[valueField]);
+         }
+         return acc;
+       }, 0);
+    };
+
+    // Add current user to weekly as well
+    const myWeekly: any = {
+      ...myPublicProfile,
+      weeklyStats: {
+        studySeconds: sumStat(useStore.getState().studySessions, 'date', 'durationSeconds'),
+        totalQuestions: sumStat(useStore.getState().questionLogs, 'date', 'totalQuestions') + sumStat(useStore.getState().simulados.filter(s => s.type === 'manual'), 'date', 'total'),
+        correctAnswers: sumStat(useStore.getState().questionLogs, 'date', 'correctAnswers') + sumStat(useStore.getState().simulados.filter(s => s.type === 'manual'), 'date', 'score')
+      }
+    };
+
+    if (!all.some(p => p.uid === myWeekly.uid)) {
+      all.push(myWeekly);
+    }
+
+    return all.sort((a: any, b: any) => {
+      if (activeWeeklyMetric === 'proficiency') {
+        const profA = a.weeklyStats?.totalQuestions > 0 ? (a.weeklyStats.correctAnswers / a.weeklyStats.totalQuestions) * 100 : 0;
+        const profB = b.weeklyStats?.totalQuestions > 0 ? (b.weeklyStats.correctAnswers / b.weeklyStats.totalQuestions) * 100 : 0;
+        return profB - profA;
+      }
+      const valA = a.weeklyStats?.[activeWeeklyMetric] || 0;
+      const valB = b.weeklyStats?.[activeWeeklyMetric] || 0;
+      return valB - valA;
+    });
   };
 
   const formatStudyTime = (totalSeconds: number) => {
@@ -175,8 +266,32 @@ export function Rankings() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <header>
-        <p className="text-zinc-400 mt-1">Siga amigos e compare seu desempenho em tempo real.</p>
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-zinc-100">Ligas e Rankings</h1>
+          <p className="text-zinc-400 mt-1">Siga amigos e compare seu desempenho em tempo real.</p>
+        </div>
+        
+        <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-xl">
+          <button 
+            onClick={() => setActiveTab('social')}
+            className={cn(
+              "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all",
+              activeTab === 'social' ? "bg-blue-600 text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            Social / Global
+          </button>
+            <button 
+            onClick={() => setActiveTab('weekly')}
+            className={cn(
+              "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all",
+              activeTab === 'weekly' ? "bg-amber-600 text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            Meu Torneio
+          </button>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -222,9 +337,21 @@ export function Rankings() {
                       </div>
                     </button>
                     {followingIds.includes(profile.uid) ? (
-                      <button onClick={() => unfollowUser(profile.uid)} className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg">
-                        <UserMinus className="w-5 h-5" />
-                      </button>
+                      <div className="flex gap-1">
+                        <button 
+                          onClick={() => toggleWeeklyRankingFriend(profile.uid)}
+                          title="Ranking Semanal"
+                          className={cn(
+                            "p-2 rounded-lg transition-colors",
+                            weeklyRankingFriendIds.includes(profile.uid) ? "text-amber-400 bg-amber-400/10" : "text-zinc-500 hover:text-amber-400"
+                          )}
+                        >
+                          <Trophy className="w-5 h-5" />
+                        </button>
+                        <button onClick={() => unfollowUser(profile.uid)} className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg">
+                          <UserMinus className="w-5 h-5" />
+                        </button>
+                      </div>
                     ) : (
                       <button onClick={() => followUser(profile.uid)} className="p-2 text-emerald-400 hover:bg-emerald-400/10 rounded-lg">
                         <UserPlus className="w-5 h-5" />
@@ -305,7 +432,21 @@ export function Rankings() {
                       <div className="text-[10px] text-zinc-500">🏆 {profile.stats.totalQuestions} questões</div>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:translate-x-1 transition-transform" />
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleWeeklyRankingFriend(profile.uid);
+                      }}
+                      className={cn(
+                        "p-2 rounded-lg transition-colors",
+                        weeklyRankingFriendIds.includes(profile.uid) ? "text-amber-400 bg-amber-400/10" : "text-zinc-500 hover:text-amber-400"
+                      )}
+                    >
+                      <Trophy className="w-4 h-4" />
+                    </button>
+                    <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:translate-x-1 transition-transform" />
+                  </div>
                 </button>
               ))}
               {friendsProfiles.length === 0 && (
@@ -319,84 +460,207 @@ export function Rankings() {
 
         {/* Right Column: Rankings */}
         <div className="lg:col-span-2 space-y-6">
-          <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-            <div className="p-6 border-b border-zinc-800">
-              <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-3">
-                <Trophy className="w-6 h-6 text-amber-400" />
-                Ligas e Rankings (Amigos)
-              </h2>
-            </div>
-            
-            <div className="flex bg-zinc-900/50 p-1 border-b border-zinc-800 overflow-x-auto no-scrollbar">
-              {[
-                { id: 'totalQuestions', label: 'Questões', icon: Target },
-                { id: 'totalCorrect', label: 'Acertos', icon: Trophy },
-                { id: 'totalStudySeconds', label: 'Horas', icon: Clock },
-                { id: 'completedTheories', label: 'Teoria', icon: BookOpen },
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveRankingTab(tab.id as RankingMetric)}
-                  className={cn(
-                    "flex-1 flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap",
-                    activeRankingTab === tab.id ? "text-amber-400 bg-amber-400/10" : "text-zinc-500 hover:text-zinc-300"
-                  )}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="p-6">
-              <div className="space-y-4">
-                {getSortedRanking(activeRankingTab).map((profile, idx) => (
-                  <div key={profile.uid} className="flex items-center gap-4 group">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center font-mono font-bold text-sm",
-                      idx === 0 ? "bg-amber-400 text-amber-950" : 
-                      idx === 1 ? "bg-zinc-300 text-zinc-800" :
-                      idx === 2 ? "bg-amber-700 text-amber-100" :
-                      "text-zinc-500 bg-zinc-800/50"
-                    )}>
-                      {idx + 1}
-                    </div>
-                    <div className={cn(
-                      "flex-1 flex items-center justify-between p-4 bg-zinc-800/20 border border-zinc-800/50 rounded-2xl group-hover:border-amber-400/30 transition-all",
-                      profile.uid === auth.currentUser?.uid && "border-emerald-500/50 bg-emerald-500/5"
-                    )}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-zinc-950 border border-zinc-800 overflow-hidden">
-                          {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-zinc-100">{profile.name}</p>
-                          <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">{profile.editalInfo.carreira || 'Concurseiro'}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-bold text-zinc-100">
-                          {activeRankingTab === 'totalStudySeconds' ? formatStudyTime(profile.stats.totalStudySeconds) : 
-                           activeRankingTab === 'completedTheories' ? `${profile.stats.completedTheories}/${profile.stats.totalTopics}` :
-                           profile.stats[activeRankingTab]}
-                        </p>
-                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
-                          {activeRankingTab === 'totalQuestions' ? 'Total' : 
-                           activeRankingTab === 'totalCorrect' ? 'Acertos' :
-                           activeRankingTab === 'totalStudySeconds' ? 'Estudadas' : 'Concluídas'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {friendsProfiles.length === 0 && (
-                  <div className="text-center py-20 text-zinc-600">
-                    Siga amigos para vê-los no ranking.
-                  </div>
-                )}
+          {activeTab === 'social' ? (
+            <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-xl">
+              <div className="p-6 border-b border-zinc-800">
+                <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-3">
+                  <Globe className="w-6 h-6 text-blue-400" />
+                  Ranking Geral de Amigos
+                </h2>
               </div>
-            </div>
-          </section>
+              
+              <div className="flex bg-zinc-900/50 p-1 border-b border-zinc-800 overflow-x-auto no-scrollbar">
+                {[
+                  { id: 'proficiency', label: 'Proficiência', icon: Target },
+                  { id: 'totalStudySeconds', label: 'Horas', icon: Clock },
+                  { id: 'completedTheories', label: 'Teoria', icon: BookOpen },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveRankingTab(tab.id as RankingMetric)}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-2 px-4 py-3 text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap",
+                      activeRankingTab === tab.id ? "text-blue-400 bg-blue-400/10 border-b-2 border-blue-400" : "text-zinc-500 hover:text-zinc-300"
+                    )}
+                  >
+                    <tab.icon className="w-4 h-4" />
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="p-6">
+                <div className="space-y-4">
+                  {getSortedRanking(activeRankingTab).map((profile, idx) => (
+                    <div key={profile.uid} className="flex items-center gap-4 group">
+                      <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center font-mono font-bold text-sm",
+                        idx === 0 ? "bg-amber-400 text-amber-950" : 
+                        idx === 1 ? "bg-zinc-300 text-zinc-800" :
+                        idx === 2 ? "bg-amber-700 text-amber-100" :
+                        "text-zinc-500 bg-zinc-800/50"
+                      )}>
+                        {idx + 1}
+                      </div>
+                      <div className={cn(
+                        "flex-1 flex items-center justify-between p-4 bg-zinc-800/20 border border-zinc-800/50 rounded-2xl group-hover:border-blue-400/30 transition-all",
+                        profile.uid === auth.currentUser?.uid && "border-emerald-500/50 bg-emerald-500/5"
+                      )}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-zinc-950 border border-zinc-800 overflow-hidden">
+                            {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-zinc-100">{profile.name}</p>
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">{profile.username}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-zinc-100">
+                            {activeRankingTab === 'totalStudySeconds' ? formatStudyTime(profile.stats.totalStudySeconds) : 
+                             activeRankingTab === 'completedTheories' ? `${profile.stats.completedTheories}/${profile.stats.totalTopics}` :
+                             `${profile.stats.totalQuestions > 0 ? Math.round((profile.stats.totalCorrect / profile.stats.totalQuestions) * 100) : 0}%`}
+                          </p>
+                          <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
+                            {activeRankingTab === 'proficiency' ? 'Aproveitamento' : 
+                             activeRankingTab === 'totalStudySeconds' ? 'Estudadas' : 'Concluídas'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {friendsProfiles.length === 0 && (
+                    <div className="text-center py-20 text-zinc-600">
+                      Siga amigos para vê-los no ranking.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          ) : (
+            <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-xl border-amber-500/20">
+              <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-gradient-to-r from-amber-500/5 to-transparent">
+                <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-3">
+                  <Trophy className="w-6 h-6 text-amber-400" />
+                  Ranking do Torneio
+                </h2>
+                <div className="flex bg-zinc-950 rounded-lg p-1 border border-zinc-800">
+                   <button 
+                    onClick={() => setActiveWeeklyMetric('studySeconds')}
+                    className={cn(
+                      "px-3 py-1 rounded text-[10px] font-bold uppercase transition-all",
+                      activeWeeklyMetric === 'studySeconds' ? "bg-amber-500 text-zinc-950" : "text-zinc-500"
+                    )}
+                   >Horas</button>
+                   <button 
+                    onClick={() => setActiveWeeklyMetric('proficiency')}
+                    className={cn(
+                      "px-3 py-1 rounded text-[10px] font-bold uppercase transition-all",
+                      activeWeeklyMetric === 'proficiency' ? "bg-amber-500 text-zinc-950" : "text-zinc-500"
+                    )}
+                   >Proficiência</button>
+                </div>
+              </div>
+
+              <div className="p-6">
+                <div className="space-y-4">
+                  {getSortedWeeklyRanking().map((profile: any, idx) => (
+                    <div key={profile.uid} className="flex items-center gap-4 group">
+                      <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center font-mono font-bold text-sm",
+                        idx === 0 ? "bg-amber-400 text-amber-950" : 
+                        idx === 1 ? "bg-zinc-300 text-zinc-800" :
+                        idx === 2 ? "bg-amber-700 text-amber-100" :
+                        "text-zinc-500 bg-zinc-800/50"
+                      )}>
+                        {idx + 1}
+                      </div>
+                      <div className={cn(
+                        "flex-1 flex items-center justify-between p-4 bg-zinc-800/20 border border-zinc-800/50 rounded-2xl group-hover:border-amber-400/30 transition-all",
+                        profile.uid === auth.currentUser?.uid && "border-emerald-500/50 bg-emerald-500/5"
+                      )}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-zinc-950 border border-zinc-800 overflow-hidden">
+                            {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-zinc-100">{profile.name}</p>
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Semana Atual</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-amber-400">
+                            {activeWeeklyMetric === 'studySeconds' 
+                               ? formatStudyTime(profile.weeklyStats?.studySeconds || 0)
+                               : `${profile.weeklyStats?.totalQuestions > 0 ? Math.round((profile.weeklyStats?.correctAnswers / profile.weeklyStats?.totalQuestions) * 100) : 0}%`}
+                          </p>
+                          <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
+                            {activeWeeklyMetric === 'studySeconds' ? 'Nesta Semana' : 'Aproveitamento'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {weeklyRankingFriendIds.length === 0 && (
+                    <div className="text-center py-20 bg-zinc-950/30 border-2 border-dashed border-zinc-800 rounded-3xl">
+                      <Trophy className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
+                      <p className="text-zinc-400 font-medium">Você ainda não escolheu amigos para este ranking.</p>
+                      <p className="text-xs text-zinc-600 mt-1 max-w-[250px] mx-auto">
+                        Clique no ícone de troféu ao lado do nome de um amigo na lista lateral para adicioná-lo.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="px-6 py-4 bg-amber-500/5 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                 <div className="flex items-center gap-2">
+                   <Calendar className="w-4 h-4 text-amber-500" />
+                   <span className="text-[10px] text-amber-500/80 font-bold uppercase tracking-[0.1em]">
+                      Data Limite do Torneio
+                   </span>
+                 </div>
+                 
+                 <div className="flex items-center gap-2">
+                    {customRankingEndDate && (
+                      <button 
+                        onClick={() => {
+                          if(confirm('Tem certeza que deseja apagar o torneio atual?')) {
+                            setCustomRankingDates(null, null);
+                          }
+                        }}
+                        className="text-[10px] text-zinc-500 hover:text-red-400 font-bold px-2 py-1"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                    <input 
+                      type="date"
+                      value={customRankingEndDate ? customRankingEndDate.split('T')[0] : ''}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                           // Define start date as 'now' and end date as selected date at 23:59:59
+                           const endDate = new Date(e.target.value);
+                           endDate.setHours(23, 59, 59, 999);
+                           setCustomRankingDates(new Date().toISOString(), endDate.toISOString());
+                        } else {
+                           setCustomRankingDates(null, null);
+                        }
+                      }}
+                      className="bg-zinc-950 border border-amber-500/20 text-zinc-100 rounded-lg text-xs px-3 py-1.5 focus:outline-none focus:border-amber-500/50"
+                    />
+                 </div>
+              </div>
+              {!customRankingEndDate && (
+                <div className="px-6 pb-4 bg-amber-500/5">
+                   <p className="text-[10px] text-zinc-500 italic text-center">
+                      * Se não definir uma data limite, o ranking refletirá os dados da semana atual (segunda a domingo).
+                   </p>
+                </div>
+              )}
+            </section>
+          )}
         </div>
       </div>
 

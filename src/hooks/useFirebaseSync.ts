@@ -4,6 +4,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useStore } from '../store';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { startOfWeek, format, parseISO } from 'date-fns';
 
 export function useFirebaseSync() {
   const store = useStore();
@@ -45,6 +46,9 @@ export function useFirebaseSync() {
               scheduleConfig: remoteData.scheduleConfig ?? useStore.getState().scheduleConfig,
               userProfile: remoteData.userProfile ?? useStore.getState().userProfile,
               followingIds: remoteData.followingIds ?? [],
+              weeklyRankingFriendIds: remoteData.weeklyRankingFriendIds ?? [],
+              customRankingStartDate: remoteData.customRankingStartDate ?? null,
+              customRankingEndDate: remoteData.customRankingEndDate ?? null,
               currentCycleIndex: remoteData.currentCycleIndex ?? 0,
               activeTopicId: remoteData.activeTopicId ?? null,
               isAuthenticated: true,
@@ -125,6 +129,7 @@ export function useFirebaseSync() {
           setCurrentCycleIndex, resetAllData, followUser, unfollowUser,
           setAutoGenerateTopicId, autoGenerateTopicId,
           setSharedQuestions, sharedQuestions,
+          customRankingStartDate, customRankingEndDate,
           ...dataToSave
         } = store;
 
@@ -145,6 +150,33 @@ export function useFirebaseSync() {
           const totalStudySeconds = store.studySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0);
           const completedTheories = store.topics.filter(t => t.status !== 'NOT_READ').length;
           const totalTopics = store.topics.length;
+          
+          // ────────────────────────────────────────────────
+          // Custom / Weekly Stats Calculation
+          // ────────────────────────────────────────────────
+          const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 }); // Segunda-feira
+          const weekId = store.customRankingEndDate ? `custom-${store.customRankingStartDate}-${store.customRankingEndDate}` : format(weekStart, 'yyyy-ww');
+          
+          const rankingStart = store.customRankingStartDate ? parseISO(store.customRankingStartDate) : weekStart;
+          const rankingEnd = store.customRankingEndDate ? parseISO(store.customRankingEndDate) : null;
+          
+          let validSessions = store.studySessions;
+          let validLogs = store.questionLogs;
+          let validSimulados = manualSimulados;
+
+          validSessions = validSessions.filter(s => parseISO(s.date).getTime() >= rankingStart.getTime());
+          validLogs = validLogs.filter(q => parseISO(q.date).getTime() >= rankingStart.getTime());
+          validSimulados = validSimulados.filter(s => parseISO(s.date).getTime() >= rankingStart.getTime());
+
+          if (rankingEnd) {
+             validSessions = validSessions.filter(s => parseISO(s.date).getTime() <= rankingEnd.getTime());
+             validLogs = validLogs.filter(q => parseISO(q.date).getTime() <= rankingEnd.getTime());
+             validSimulados = validSimulados.filter(s => parseISO(s.date).getTime() <= rankingEnd.getTime());
+          }
+          
+          const weeklyStudySeconds = validSessions.reduce((acc, curr) => acc + curr.durationSeconds, 0);
+          const weeklyTotalQs = validLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0) + validSimulados.reduce((acc, curr) => acc + curr.total, 0);
+          const weeklyCorrectQs = validLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0) + validSimulados.reduce((acc, curr) => acc + curr.score, 0);
 
           await setDoc(profileRef, {
             uid: user.uid,
@@ -169,6 +201,12 @@ export function useFirebaseSync() {
               completedTheories,
               totalTopics,
               lastUpdate: new Date().toISOString()
+            },
+            weeklyStats: {
+              weekId,
+              studySeconds: weeklyStudySeconds,
+              totalQuestions: weeklyTotalQs,
+              correctAnswers: weeklyCorrectQs
             }
           }, { merge: true });
         }
