@@ -154,7 +154,7 @@ export function Dashboard() {
           <h2 className="text-lg font-semibold text-zinc-100 mb-4">Evolução em Simulados</h2>
           <div className="flex-1 h-[250px] w-full mt-4">
             {simuladoData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={simuladoData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                   <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />

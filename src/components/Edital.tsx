@@ -70,7 +70,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
           const genAI = new GoogleGenerativeAI(apiKey);
           // Primeira tentativa: Flash Latest
           const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash-latest",
+            model: "gemini-2.5-flash",
             generationConfig: { responseMimeType: "application/json" }
           });
 
@@ -111,7 +111,7 @@ REGRAS DE VERTICALIZAÇÃO:
              console.log('Tentando modelo alternativo (gemini-1.5-pro)...');
              try {
                const fallbackModel = genAI.getGenerativeModel({ 
-                 model: "gemini-1.5-pro-latest", 
+                 model: "gemini-2.5-pro", 
                  generationConfig: { responseMimeType: "application/json" } 
                });
                const result = await fallbackModel.generateContent([

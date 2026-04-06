@@ -106,7 +106,7 @@ export function Simulados() {
       const genAI = new GoogleGenerativeAI(apiKey);
       // Tentativa 1: Flash Latest
       const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash-latest",
+        model: "gemini-2.5-flash",
         generationConfig: { responseMimeType: "application/json" }
       });
       
@@ -156,27 +156,23 @@ RETORNE UM JSON NO FORMATO:
         const result = await model.generateContent(prompt);
         response = await result.response;
       } catch (err: any) {
-        console.error('Primeira tentativa falhou:', err);
-        // Tenta o modelo Pro como fallback em caso de qualquer erro (ex: 404, 429, 503)
-        console.log('Modelo Flash indisponível ou erro, tentando fallback (gemini-1.5-pro)...');
+        console.error('Primeira tentativa (1.5-flash) falhou:', err);
+        const errMsg = err.message || '';
+        if (errMsg.includes('API key') || errMsg.includes('API_KEY_INVALID') || errMsg.includes('expired')) {
+           throw new Error('CHAVE INVÁLIDA: A API Key do Gemini está expirada ou incorreta. Crie uma nova em aistudio.google.com/app/apikey e atualize o .env');
+        }
+
+        console.log('Modelo Flash principal falhou. Tentando modelo pro...');
         try {
           const fallbackModel = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-pro-latest",
+            model: "gemini-2.5-pro",
             generationConfig: { responseMimeType: "application/json" }
           });
           const result = await fallbackModel.generateContent(prompt);
           response = await result.response;
         } catch (fallbackErr: any) {
-          console.log('Tentativa com Pro Latest falhou, tentando modelo legado (gemini-pro)...');
-          try {
-            // Última tentativa: gemini-pro (v1.0 básico, aceita em qualquer lugar)
-            const legacyModel = genAI.getGenerativeModel({ model: "gemini-pro" });
-            const result = await legacyModel.generateContent(prompt);
-            response = await result.response;
-          } catch (legacyErr) {
-            console.error('Todas as tentativas falharam:', legacyErr);
-            throw new Error('Falha total na API do Gemini. Verifique no AI Studio se sua chave tem acesso aos modelos 1.5 Flash.');
-          }
+          console.error('Tentativa com 8b também falhou:', fallbackErr);
+          throw new Error(`Falha na IA.\nErro modelo principal: ${errMsg}\nErro fallback: ${fallbackErr.message}`);
         }
       }
       const responseText = response.text();
@@ -198,8 +194,8 @@ RETORNE UM JSON NO FORMATO:
       let errorMsg = 'Erro ao gerar o simulado.';
       if (error.message?.includes('503')) errorMsg = 'IA Temporariamente Indisponível (Sobrecarregada). Tente novamente em alguns segundos.';
       else if (error.message?.includes('429')) errorMsg = 'Limite de uso da IA excedido. Tente novamente em um minuto.';
-      else if (error.message?.includes('403')) errorMsg = 'Erro de autenticação com a chave da API.';
-      alert(`${errorMsg} Detalha: ${error.message || ''}`);
+      else if (error.message?.includes('403') || error.message?.includes('CHAVE INVÁLIDA')) errorMsg = 'Erro de autenticação: API Key inválida ou expirada.';
+      alert(`${errorMsg}\n\nDetalhes: ${error.message || ''}`);
     } finally {
       setIsGenerating(false);
     }
