@@ -76,13 +76,13 @@ export function Cronograma() {
     }));
   };
 
-  // Generate schedule for the next 14 days
+  // Generate schedule for the next 7 days
   const scheduleDays = [];
   let cyclePtr = currentCycleIndex;
   
   const hoursPerActiveDay = scheduleConfig.hoursPerDay;
 
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 7; i++) {
     const date = addDays(today, i);
     const dayOfWeek = getDay(date);
     const isActive = scheduleConfig.activeDays.includes(dayOfWeek);
@@ -239,7 +239,7 @@ export function Cronograma() {
       <div className="space-y-4">
         <h2 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
           <Calendar className="w-5 h-5 text-emerald-500" />
-          Próximos 14 Dias
+          Próximos 7 Dias
         </h2>
 
         {subjects.length === 0 ? (

@@ -1,22 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useStore } from '@/store';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, AlertTriangle, Trash2, BrainCircuit } from 'lucide-react';
+import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, AlertTriangle, Trash2, BrainCircuit, Share2, Users } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { db, auth } from '@/lib/firebase';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
+import { GeneratedQuestion, SharedQuestion } from '@/store';
 
-interface GeneratedQuestion {
-  subject: string;
-  topic: string;
-  text: string;
-  options: string[];
-  correctIndex: number;
-  explanation: string;
-}
+// Removido interface GeneratedQuestion local pois foi movida para o store.ts
 
 export function Simulados() {
-  const { simulados, addSimulado, deleteSimulado, subjects, topics, editalInfo, addFlashcard, addQuestionLog, logStudySession } = useStore();
+  const { simulados, addSimulado, deleteSimulado, subjects, topics, editalInfo, addFlashcard, addQuestionLog, logStudySession, autoGenerateTopicId, setAutoGenerateTopicId, followingIds, sharedQuestions, userProfile } = useStore();
   const [isAdding, setIsAdding] = useState(false);
   const [name, setName] = useState('');
   const [score, setScore] = useState('');
@@ -36,6 +32,12 @@ export function Simulados() {
   const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
   const [examFinished, setExamFinished] = useState(false);
   const [examStartTime, setExamStartTime] = useState<number|null>(null);
+
+  // Sharing State
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [questionToShare, setQuestionToShare] = useState<GeneratedQuestion|null>(null);
+  const [friends, setFriends] = useState<{uid: string, name: string, username: string}[]>([]);
+  const [isSharingLoading, setIsSharingLoading] = useState(false);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,15 +85,18 @@ export function Simulados() {
 
   const totalRequestedQuestions = Object.values(distribution).reduce((a: number, b: number) => a + b, 0);
 
-  const generateExam = async () => {
-    if (totalRequestedQuestions === 0) {
+  const generateExam = useCallback(async (overrideDistribution?: Record<string, number>, targetTopicId?: string) => {
+    const dist = overrideDistribution || distribution;
+    const total = Object.values(dist).reduce((a: number, b: number) => a + b, 0);
+
+    if (total === 0) {
       alert('Selecione pelo menos uma questão.');
       return;
     }
 
     setIsGenerating(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY?.replace(/['"]/g, '').trim();
       if (!apiKey) {
         alert('API Key do Gemini não configurada.');
         setIsGenerating(false);
@@ -99,32 +104,39 @@ export function Simulados() {
       }
 
       const genAI = new GoogleGenerativeAI(apiKey);
-      // Usando o apelido dinâmico para garantir o modelo mais potente e disponível
+      // Tentativa 1: Flash Latest
       const model = genAI.getGenerativeModel({ 
-        model: "gemini-flash-latest",
+        model: "gemini-1.5-flash-latest",
         generationConfig: { responseMimeType: "application/json" }
       });
       
       const isCespe = editalInfo.banca.toLowerCase().includes('cespe') || editalInfo.banca.toLowerCase().includes('cebraspe');
-      const numOptions = isCespe ? 2 : 5;
-      const optionsDesc = isCespe ? 'Exatamente 2 alternativas (Certo/Errado)' : 'Exatamente 5 alternativas';
       const promptType = isCespe ? 'Certo/Errado (2 alternativas)' : 'múltipla escolha (5 alternativas)';
 
-      const subjectsWithTopics = subjects
-        .filter(s => distribution[s.id] > 0)
-        .map(s => ({
-          disciplina: s.name,
-          quantidade_questoes: distribution[s.id],
-          topicos_base: topics.filter(t => t.subjectId === s.id).map(t => t.name)
-        }));
+      let subjectsWithTopics;
+      if (targetTopicId) {
+        const topic = topics.find(t => t.id === targetTopicId);
+        const subject = subjects.find(s => s.id === topic?.subjectId);
+        subjectsWithTopics = [{
+          disciplina: subject?.name || 'Assunto',
+          quantidade_questoes: 3,
+          topicos_base: [topic?.name || 'Tema']
+        }];
+      } else {
+        subjectsWithTopics = subjects
+          .filter(s => dist[s.id] > 0)
+          .map(s => ({
+            disciplina: s.name,
+            quantidade_questoes: dist[s.id],
+            topicos_base: topics.filter(t => t.subjectId === s.id).map(t => t.name)
+          }));
+      }
 
-      console.log('Gerando simulado com Gemini 1.5 Pro (SDK Estável)...');
-      
       const prompt = `Gere um simulado de ${promptType} focado em concursos públicos para a banca ${editalInfo.banca || 'padrão'}.
 Distribuição solicitada de questões:
 ${JSON.stringify(subjectsWithTopics, null, 2)}
 
-Crie questões desafiadoras, focadas nos tópicos listados para cada disciplina.
+Crie questões desafiadoras, focadas EXCLUSIVAMENTE nos tópicos listados para cada disciplina.
 IMPORTANTE: Utilize PRIORITARIAMENTE os nomes de disciplinas e tópicos exatamente como fornecidos no JSON acima para os campos "subject" e "topic".
 
 RETORNE UM JSON NO FORMATO:
@@ -139,8 +151,34 @@ RETORNE UM JSON NO FORMATO:
   }
 ]`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
+      let response;
+      try {
+        const result = await model.generateContent(prompt);
+        response = await result.response;
+      } catch (err: any) {
+        console.error('Primeira tentativa falhou:', err);
+        // Tenta o modelo Pro como fallback em caso de qualquer erro (ex: 404, 429, 503)
+        console.log('Modelo Flash indisponível ou erro, tentando fallback (gemini-1.5-pro)...');
+        try {
+          const fallbackModel = genAI.getGenerativeModel({ 
+            model: "gemini-1.5-pro-latest",
+            generationConfig: { responseMimeType: "application/json" }
+          });
+          const result = await fallbackModel.generateContent(prompt);
+          response = await result.response;
+        } catch (fallbackErr: any) {
+          console.log('Tentativa com Pro Latest falhou, tentando modelo legado (gemini-pro)...');
+          try {
+            // Última tentativa: gemini-pro (v1.0 básico, aceita em qualquer lugar)
+            const legacyModel = genAI.getGenerativeModel({ model: "gemini-pro" });
+            const result = await legacyModel.generateContent(prompt);
+            response = await result.response;
+          } catch (legacyErr) {
+            console.error('Todas as tentativas falharam:', legacyErr);
+            throw new Error('Falha total na API do Gemini. Verifique no AI Studio se sua chave tem acesso aos modelos 1.5 Flash.');
+          }
+        }
+      }
       const responseText = response.text();
 
       if (responseText) {
@@ -158,13 +196,24 @@ RETORNE UM JSON NO FORMATO:
     } catch (error: any) {
       console.error('Erro ao gerar simulado:', error);
       let errorMsg = 'Erro ao gerar o simulado.';
-      if (error.message?.includes('429')) errorMsg = 'Limite de uso da IA excedido. Tente novamente em um minuto.';
+      if (error.message?.includes('503')) errorMsg = 'IA Temporariamente Indisponível (Sobrecarregada). Tente novamente em alguns segundos.';
+      else if (error.message?.includes('429')) errorMsg = 'Limite de uso da IA excedido. Tente novamente em um minuto.';
       else if (error.message?.includes('403')) errorMsg = 'Erro de autenticação com a chave da API.';
-      alert(`${errorMsg} Tente novamente.`);
+      alert(`${errorMsg} Detalha: ${error.message || ''}`);
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [distribution, editalInfo.banca, subjects, topics]);
+
+  useEffect(() => {
+    if (autoGenerateTopicId) {
+      const topic = topics.find(t => t.id === autoGenerateTopicId);
+      if (topic) {
+        generateExam({ [topic.subjectId]: 3 }, topic.id);
+      }
+      setAutoGenerateTopicId(null);
+    }
+  }, [autoGenerateTopicId, topics, generateExam, setAutoGenerateTopicId]);
 
   const finishExam = () => {
     if (!activeExam) return;
@@ -247,29 +296,95 @@ RETORNE UM JSON NO FORMATO:
     setExamFinished(true);
   };
 
-  const handleCreateFlashcard = (q: GeneratedQuestion, index: number) => {
-    // Find topicId
-    const subject = subjects.find(s => s.name === q.subject);
-    if (!subject) return;
-    
-    const topic = topics.find(t => t.subjectId === subject.id && t.name === q.topic);
-    if (!topic) return;
-
+  const handleConvertToFlashcard = (q: GeneratedQuestion, index: number) => {
     addFlashcard({
-      topicId: topic.id,
+      topicId: topics.find(t => t.name === q.topic)?.id || topics[0]?.id || 't1',
       front: q.text,
-      back: `Resposta Correta: ${q.options[q.correctIndex]}\n\nExplicação: ${q.explanation}`
+      back: `Assunto: ${q.subject}\nResposta: ${q.options[q.correctIndex]}\n\nExplicação: ${q.explanation}`
     });
-
     setConvertedToFlashcard(prev => ({ ...prev, [index]: true }));
   };
+
+  const openShareModal = (q: GeneratedQuestion) => {
+    setQuestionToShare(q);
+    setIsShareModalOpen(true);
+    fetchFriends();
+  };
+
+  const fetchFriends = async () => {
+    if (followingIds.length === 0) return;
+    setIsSharingLoading(true);
+    try {
+      const q = query(collection(db, 'profiles'), where('uid', 'in', followingIds));
+      const snap = await getDocs(q);
+      const profiles = snap.docs.map(doc => ({
+        uid: doc.id,
+        name: doc.data().name,
+        username: doc.data().username
+      }));
+      setFriends(profiles);
+    } catch (err) {
+      console.error('Erro ao buscar amigos para compartilhar:', err);
+    } finally {
+      setIsSharingLoading(false);
+    }
+  };
+
+  const shareWithFriend = async (friendUid: string) => {
+    if (!questionToShare || !auth.currentUser) return;
+    
+    try {
+      await addDoc(collection(db, 'shared_questions'), {
+        fromUid: auth.currentUser.uid,
+        fromName: userProfile.name,
+        toUid: friendUid,
+        date: new Date().toISOString(),
+        question: questionToShare,
+        timestamp: serverTimestamp()
+      });
+      alert('Questão compartilhada com sucesso!');
+      setIsShareModalOpen(false);
+    } catch (err) {
+      console.error('Erro ao compartilhar questão:', err);
+      alert('Erro ao compartilhar.');
+    }
+  };
+
+  const deleteSharedQuestion = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'shared_questions', id));
+    } catch (err) {
+      console.error('Erro ao excluir questão compartilhada:', err);
+    }
+  };
+
+  if (isGenerating && !activeExam) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-8 animate-in fade-in duration-300">
+        <div className="relative">
+          <div className="w-20 h-20 border-4 border-blue-500/10 border-t-blue-500 rounded-full animate-spin" />
+          <Brain className="w-8 h-8 text-blue-400 absolute inset-0 m-auto animate-pulse" />
+        </div>
+        <div className="text-center space-y-2">
+          <h2 className="text-2xl font-black text-zinc-100 tracking-tight">Gerando suas questões...</h2>
+          <p className="text-zinc-500 font-medium">A IA do Ciclo está preparando o melhor material para você. Aguarde alguns segundos.</p>
+          <div className="flex items-center justify-center gap-2 text-[10px] text-blue-400 font-bold uppercase tracking-widest pt-4">
+             <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" />
+             <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce [animation-delay:0.2s]" />
+             <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce [animation-delay:0.4s]" />
+             Processando
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (activeExam) {
     return (
       <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
         <header className="flex justify-between items-end border-b border-zinc-800 pb-6">
           <div>
-            <h1 className="text-3xl font-bold text-zinc-100 tracking-tight">Simulado IA</h1>
+            <h1 className="text-3xl font-bold text-zinc-100 tracking-tight">Simulado e Questões IA</h1>
             <p className="text-zinc-400 mt-1">
               {examFinished ? 'Resultados do simulado' : `Questão ${Object.keys(userAnswers).length} de ${activeExam.length} respondidas`}
             </p>
@@ -348,30 +463,35 @@ RETORNE UM JSON NO FORMATO:
                     <p className="text-zinc-400 text-sm leading-relaxed">{q.explanation}</p>
                   </div>
 
-                  {userAnswers[qIndex] !== q.correctIndex && (
-                    <div className="flex justify-end">
-                      <button
-                        onClick={() => handleCreateFlashcard(q, qIndex)}
-                        disabled={convertedToFlashcard[qIndex]}
-                        className={cn(
-                          "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                          convertedToFlashcard[qIndex]
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                            : "bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30"
-                        )}
-                      >
-                        {convertedToFlashcard[qIndex] ? (
-                          <>
-                            <CheckCircle2 className="w-4 h-4" /> Flashcard Criado
-                          </>
-                        ) : (
-                          <>
-                            <BrainCircuit className="w-4 h-4" /> Criar Flashcard desta Questão
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex justify-end gap-3 pt-4">
+                    <button
+                      onClick={() => handleConvertToFlashcard(q, qIndex)}
+                      disabled={convertedToFlashcard[qIndex]}
+                      className={cn(
+                        "flex-1 items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-bold transition-all flex border",
+                        convertedToFlashcard[qIndex]
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                          : "bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border-blue-500/30"
+                      )}
+                    >
+                      {convertedToFlashcard[qIndex] ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" /> Flashcard Criado
+                        </>
+                      ) : (
+                        <>
+                          <BrainCircuit className="w-4 h-4" /> Criar Flashcard
+                        </>
+                      )}
+                    </button>
+                    
+                    <button
+                      onClick={() => openShareModal(q)}
+                      className="flex-1 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 border border-zinc-700/50 px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"
+                    >
+                      <Share2 className="w-4 h-4" /> Compartilhar Questão
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -397,9 +517,14 @@ RETORNE UM JSON NO FORMATO:
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex justify-between items-end">
         <div>
-          <p className="text-zinc-400 mt-1">Registre e acompanhe sua evolução em provas completas.</p>
+          <p className="text-zinc-400 mt-1">Registre e acompanhe sua evolução em provas completas e questões avulsas.</p>
         </div>
         <div className="flex gap-3">
+          {sharedQuestions.length > 0 && (
+             <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[10px] font-bold text-amber-500 uppercase tracking-widest animate-pulse">
+                <Users className="w-3 h-3" /> {sharedQuestions.length} novas questões compartilhadas
+             </div>
+          )}
           <button 
             onClick={() => setIsGeneratingModalOpen(true)}
             className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
@@ -416,6 +541,49 @@ RETORNE UM JSON NO FORMATO:
         </div>
       </header>
 
+      {/* Shared Questions Section */}
+      {sharedQuestions.length > 0 && (
+        <section className="bg-amber-500/5 border border-amber-500/10 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-amber-500 flex items-center gap-2">
+              <Users className="w-5 h-5" /> Questões Compartilhadas com Você
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {sharedQuestions.map((shared) => (
+              <div key={shared.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-amber-500/30 transition-all group">
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-400 font-bold">
+                       {shared.fromName.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Enviado por {shared.fromName}</p>
+                      <p className="text-[8px] text-zinc-600">{format(parseISO(shared.date), "dd/MM 'às' HH:mm", { locale: ptBR })}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => deleteSharedQuestion(shared.id)} className="p-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+                <p className="text-sm text-zinc-100 line-clamp-2 mb-4 italic">"{shared.question.text}"</p>
+                <button 
+                  onClick={() => {
+                    setActiveExam([shared.question]);
+                    setUserAnswers({});
+                    setExamFinished(false);
+                    setExamStartTime(Date.now());
+                  }}
+                  className="w-full py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 text-xs font-bold rounded-lg border border-amber-500/20 transition-all flex items-center justify-center gap-2"
+                >
+                  <Brain className="w-3 h-3" /> Resolver agora
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Modal de Geração */}
       {isGeneratingModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -423,7 +591,7 @@ RETORNE UM JSON NO FORMATO:
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
                 <Brain className="w-5 h-5 text-blue-400" />
-                Gerar Simulado
+                Gerar Simulado ou Questões
               </h2>
               <button onClick={() => setIsGeneratingModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">
                 <X className="w-5 h-5" />
@@ -633,6 +801,59 @@ RETORNE UM JSON NO FORMATO:
           </div>
         )}
       </div>
+      {/* Share Modal */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-3">
+                <Share2 className="w-6 h-6 text-blue-400" />
+                Compartilhar Questão
+              </h2>
+              <button onClick={() => setIsShareModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <p className="text-zinc-400 text-sm mb-6 bg-zinc-950 p-4 rounded-xl border border-zinc-800 italic">
+               "{questionToShare?.text.substring(0, 100)}..."
+            </p>
+
+            <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+               <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Para qual amigo?</p>
+               {isSharingLoading ? (
+                 <div className="flex justify-center py-8">
+                   <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                 </div>
+               ) : friends.length > 0 ? (
+                 friends.map(friend => (
+                   <button 
+                    key={friend.uid}
+                    onClick={() => shareWithFriend(friend.uid)}
+                    className="w-full flex items-center justify-between p-4 bg-zinc-800/30 hover:bg-blue-600/10 rounded-2xl border border-zinc-800 hover:border-blue-500/30 transition-all text-left group"
+                   >
+                     <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400 group-hover:text-blue-400">
+                          {friend.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold text-zinc-100">{friend.name}</div>
+                          <div className="text-[10px] text-zinc-500">@{friend.username}</div>
+                        </div>
+                     </div>
+                     <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-blue-400" />
+                   </button>
+                 ))
+               ) : (
+                 <div className="text-center py-8">
+                   <p className="text-zinc-500 text-sm italic">Você não segue nenhum amigo ainda.</p>
+                   <p className="text-[10px] text-zinc-600 mt-1">Siga outros alunos na aba Rankings para compartilhar questões.</p>
+                 </div>
+               )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

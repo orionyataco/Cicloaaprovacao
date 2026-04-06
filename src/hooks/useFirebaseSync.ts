@@ -3,6 +3,7 @@ import { auth, db } from '../lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useStore } from '../store';
 import { onAuthStateChanged } from 'firebase/auth';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 export function useFirebaseSync() {
   const store = useStore();
@@ -12,6 +13,9 @@ export function useFirebaseSync() {
   const hasHydrated = useRef(false);
   // Ref para o timeout de debounce
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Ref para unsubscriver listeners
+  const sharedQuestionsUnsubscribe = useRef<(() => void) | null>(null);
 
   // ────────────────────────────────────────────────
   // Listener de autenticação: carrega dados do Firestore
@@ -46,6 +50,13 @@ export function useFirebaseSync() {
               isAuthenticated: true,
             });
             console.log('[Firebase] Dados carregados do Firestore.');
+
+            // Inicia escuta de questões compartilhadas
+            const q = query(collection(db, 'shared_questions'), where('toUid', '==', user.uid));
+            sharedQuestionsUnsubscribe.current = onSnapshot(q, (snapshot) => {
+              const sharedDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+              useStore.getState().setSharedQuestions(sharedDocs);
+            });
           } else {
             // Usuário novo — Garante que o estado local esteja limpo antes de logar
             // para evitar herdar dados do localStorage de outro usuário
@@ -69,11 +80,18 @@ export function useFirebaseSync() {
         hasHydrated.current = false;
         useStore.getState().logout();
         useStore.getState().resetAllData();
+        if (sharedQuestionsUnsubscribe.current) {
+          sharedQuestionsUnsubscribe.current();
+          sharedQuestionsUnsubscribe.current = null;
+        }
         console.log('[Firebase] Usuário deslogado e estado local resetado.');
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (sharedQuestionsUnsubscribe.current) sharedQuestionsUnsubscribe.current();
+    };
   }, []);
 
   // ────────────────────────────────────────────────
@@ -105,6 +123,8 @@ export function useFirebaseSync() {
           importEdital, deleteSubject, deleteAllSubjects,
           updateEditalInfo, updateScheduleConfig, updateUserProfile,
           setCurrentCycleIndex, resetAllData, followUser, unfollowUser,
+          setAutoGenerateTopicId, autoGenerateTopicId,
+          setSharedQuestions, sharedQuestions,
           ...dataToSave
         } = store;
 
@@ -138,6 +158,10 @@ export function useFirebaseSync() {
               cargo: store.editalInfo.cargo,
               banca: store.editalInfo.banca,
             },
+            editalStructure: store.subjects.map(s => ({
+              subject: s.name,
+              topics: store.topics.filter(t => t.subjectId === s.id).map(t => t.name)
+            })),
             stats: {
               totalQuestions,
               totalCorrect,

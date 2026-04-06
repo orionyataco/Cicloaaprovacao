@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
-import { Search, UserPlus, UserMinus, Trophy, Target, Clock, BookOpen, ChevronRight, UserCircle, X, LayoutDashboard, Target as TargetIcon, Globe } from 'lucide-react';
+import { Search, UserPlus, UserMinus, Trophy, Target, Clock, BookOpen, ChevronRight, UserCircle, X, LayoutDashboard, Target as TargetIcon, Globe, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface PublicProfile {
@@ -23,12 +23,13 @@ interface PublicProfile {
     completedTheories: number;
     totalTopics: number;
   };
+  editalStructure?: { subject: string, topics: string[] }[];
 }
 
 type RankingMetric = 'totalQuestions' | 'totalCorrect' | 'totalStudySeconds' | 'completedTheories';
 
 export function Rankings() {
-  const { followingIds, followUser, unfollowUser, userProfile } = useStore();
+  const { followingIds, followUser, unfollowUser, userProfile, importEdital } = useStore();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<PublicProfile[]>([]);
@@ -142,6 +143,10 @@ export function Rankings() {
       cargo: useStore.getState().editalInfo.cargo,
       banca: useStore.getState().editalInfo.banca,
     },
+    editalStructure: useStore.getState().subjects.map(s => ({
+      subject: s.name,
+      topics: useStore.getState().topics.filter(t => t.subjectId === s.id).map(t => t.name)
+    })),
     stats: {
       totalQuestions: useStore.getState().questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0) + 
                      useStore.getState().simulados.filter(s => s.type === 'manual').reduce((acc, curr) => acc + curr.total, 0),
@@ -154,7 +159,12 @@ export function Rankings() {
   };
 
   const getSortedRanking = (metric: RankingMetric) => {
-    return [...friendsProfiles].sort((a, b) => (b.stats[metric] || 0) - (a.stats[metric] || 0));
+    const all = [...friendsProfiles];
+    // Adiciona o próprio usuário se ele tiver um perfil (username)
+    if (myPublicProfile.uid && !all.some(p => p.uid === myPublicProfile.uid)) {
+      all.push(myPublicProfile);
+    }
+    return all.sort((a, b) => (b.stats[metric] || 0) - (a.stats[metric] || 0));
   };
 
   const formatStudyTime = (totalSeconds: number) => {
@@ -351,7 +361,10 @@ export function Rankings() {
                     )}>
                       {idx + 1}
                     </div>
-                    <div className="flex-1 flex items-center justify-between p-4 bg-zinc-800/20 border border-zinc-800/50 rounded-2xl group-hover:border-amber-400/30 transition-all">
+                    <div className={cn(
+                      "flex-1 flex items-center justify-between p-4 bg-zinc-800/20 border border-zinc-800/50 rounded-2xl group-hover:border-amber-400/30 transition-all",
+                      profile.uid === auth.currentUser?.uid && "border-emerald-500/50 bg-emerald-500/5"
+                    )}>
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-zinc-950 border border-zinc-800 overflow-hidden">
                           {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
@@ -427,6 +440,57 @@ export function Rankings() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Edital Structure Sharing Area */}
+              <div className="bg-zinc-950/30 border border-zinc-800 rounded-3xl p-6 md:p-8 space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                   <div>
+                      <h3 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
+                        <BookOpen className="w-5 h-5 text-purple-400" />
+                        Edital Verticalizado
+                      </h3>
+                      <p className="text-sm text-zinc-500">Este é o conteúdo programático que o aluno está estudando.</p>
+                   </div>
+                   {selectedUser.editalStructure && selectedUser.editalStructure.length > 0 && selectedUser.uid !== auth.currentUser?.uid && (
+                     <button 
+                        onClick={() => {
+                          if (confirm(`Deseja importar os ${selectedUser.editalStructure?.length} assuntos e seus respectivos tópicos para o seu Edital? Isso será adicionado à sua lista atual.`)) {
+                            importEdital(selectedUser.editalStructure!);
+                            alert('Edital importado com sucesso!');
+                          }
+                        }}
+                        className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20 active:scale-95"
+                     >
+                       <Plus className="w-4 h-4" /> Copiar para meu Edital
+                     </button>
+                   )}
+                </div>
+
+                {selectedUser.editalStructure && selectedUser.editalStructure.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                     {selectedUser.editalStructure.map((s, idx) => (
+                       <div key={idx} className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
+                          <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest mb-2 truncate">{s.subject}</h4>
+                          <div className="space-y-1">
+                             {s.topics.slice(0, 5).map((t, tIdx) => (
+                               <div key={tIdx} className="text-[10px] text-zinc-500 flex items-center gap-1">
+                                  <div className="w-1 h-1 bg-zinc-800 rounded-full" /> {t}
+                                </div>
+                             ))}
+                             {s.topics.length > 5 && (
+                               <div className="text-[9px] text-zinc-600 pl-2">... e mais {s.topics.length - 5} tópicos</div>
+                             )}
+                          </div>
+                       </div>
+                     ))}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center border-2 border-dashed border-zinc-800 rounded-2xl">
+                    <BookOpen className="w-8 h-8 text-zinc-800 mx-auto mb-2" />
+                    <p className="text-zinc-500 text-sm italic">Este usuário ainda não verticalizou seu edital.</p>
+                  </div>
+                )}
               </div>
 
               {/* Performance Cards */}

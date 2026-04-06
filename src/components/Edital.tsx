@@ -6,9 +6,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Ciclo } from './Ciclo';
 import { Cronograma } from './Cronograma';
 
-export function Edital() {
+export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) {
   const { subjects, topics, addSubject, addTopic, updateTopicStatus, importEdital, deleteSubject, deleteAllSubjects, editalInfo, updateEditalInfo, setActiveTopicId, activeTopicId } = useStore();
   const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
+  const [isBulkAddModalOpen, setIsBulkAddModalOpen] = useState(false);
+  const [bulkText, setBulkText] = useState('');
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newTopicName, setNewTopicName] = useState('');
   const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null);
@@ -35,6 +37,8 @@ export function Edital() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  const getRandomColor = () => `#${Math.floor(Math.random()*16777215).toString(16)}`;
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -55,21 +59,20 @@ export function Edital() {
       reader.onloadend = async () => {
         try {
           const base64String = (reader.result as string).split(',')[1];
-          const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+          const apiKey = import.meta.env.VITE_GEMINI_API_KEY?.replace(/['"]/g, '').trim();
           
           if (!apiKey) {
             showToast('API Key do Gemini não configurada.', 'error');
             setIsUploading(false);
             return;
           }
+          
           const genAI = new GoogleGenerativeAI(apiKey);
-          // Usando o apelido 'gemini-flash-latest' para melhor distribuição de quota na conta gratuita
-          const model = genAI.getGenerativeModel(
-            { 
-              model: "gemini-flash-latest",
-              generationConfig: { responseMimeType: "application/json" }
-            }
-          );
+          // Primeira tentativa: Flash Latest
+          const model = genAI.getGenerativeModel({ 
+            model: "gemini-1.5-flash-latest",
+            generationConfig: { responseMimeType: "application/json" }
+          });
 
           console.log(`Iniciando análise com Gemini 2.0. Arquivo: ${file.name}`);
           
@@ -90,19 +93,48 @@ REGRAS DE VERTICALIZAÇÃO:
 2. Remova números de itens e referências burocráticas da banca. 
 3. Mantenha apenas o nome direto do assunto.`;
 
-          const result = await model.generateContent([
-            {
-              inlineData: {
-                mimeType: 'application/pdf',
-                data: base64String
-              }
-            },
-            {
-              text: prompt
-            }
-          ]);
+          let response;
+          try {
+            const result = await model.generateContent([
+              {
+                inlineData: {
+                  data: base64String,
+                  mimeType: file.type
+                }
+              },
+              { text: prompt }
+            ]);
+            response = await result.response;
+          } catch (err: any) {
+             console.error('Primeira tentativa falhou:', err);
+             // Tenta o modelo Pro como fallback em caso de qualquer erro, inclusive 404 ou 429
+             console.log('Tentando modelo alternativo (gemini-1.5-pro)...');
+             try {
+               const fallbackModel = genAI.getGenerativeModel({ 
+                 model: "gemini-1.5-pro-latest", 
+                 generationConfig: { responseMimeType: "application/json" } 
+               });
+               const result = await fallbackModel.generateContent([
+                 { inlineData: { data: base64String, mimeType: file.type } },
+                 { text: prompt }
+               ]);
+               response = await result.response;
+             } catch (fallbackErr: any) {
+               console.log('Tentativa Pro falhou, tentando gemini-pro legado...');
+               try {
+                 const legacyModel = genAI.getGenerativeModel({ model: "gemini-pro" });
+                 const result = await legacyModel.generateContent([
+                   { inlineData: { data: base64String, mimeType: file.type } },
+                   { text: prompt }
+                 ]);
+                 response = await result.response;
+               } catch (legacyErr) {
+                 console.error('Todas as tentativas falharam:', legacyErr);
+                 throw new Error('Falha ao processar PDF com IA. Verifique sua chave API no AI Studio e se o serviço está habilitado.');
+               }
+             }
+          }
 
-          const response = await result.response;
           const responseText = response.text();
 
           if (responseText) {
@@ -142,8 +174,42 @@ REGRAS DE VERTICALIZAÇÃO:
   const handleAddSubject = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubjectName.trim()) return;
-    addSubject({ name: newSubjectName, color: `#${Math.floor(Math.random()*16777215).toString(16)}` });
+    addSubject({ name: newSubjectName.trim(), color: getRandomColor() });
     setNewSubjectName('');
+  };
+
+  const handleBulkAdd = () => {
+    if (!bulkText.trim()) return;
+
+    const lines = bulkText.split('\n').filter(line => line.trim() !== '');
+    const subjectsMap: Record<string, string[]> = {};
+
+    lines.forEach(line => {
+      const parts = line.split('-').map(p => p.trim());
+      if (parts.length >= 2) {
+        const subject = parts[0];
+        const topic = parts.slice(1).join('-').trim();
+        
+        if (!subjectsMap[subject]) {
+          subjectsMap[subject] = [];
+        }
+        subjectsMap[subject].push(topic);
+      }
+    });
+
+    const importData = Object.entries(subjectsMap).map(([subject, topics]) => ({
+      subject,
+      topics
+    }));
+
+    if (importData.length > 0) {
+      importEdital(importData);
+      setBulkText('');
+      setIsBulkAddModalOpen(false);
+      showToast(`${importData.length} matérias processadas com sucesso!`, 'success');
+    } else {
+      showToast('Formato inválido. Use: Matéria - Assunto', 'error');
+    }
   };
 
   const handleAddTopic = (e: React.FormEvent, subjectId: string) => {
@@ -307,7 +373,7 @@ REGRAS DE VERTICALIZAÇÃO:
             </div>
             <h2 className="text-lg sm:text-xl font-bold text-zinc-100">Ciclo de Hoje</h2>
           </div>
-          <Ciclo />
+          <Ciclo onViewChange={onViewChange} />
         </section>
       </div>
 
@@ -357,18 +423,12 @@ REGRAS DE VERTICALIZAÇÃO:
               <span className="sm:hidden">{isUploading ? '...' : 'PDF'}</span>
             </button>
 
-            <form onSubmit={handleAddSubject} className="flex gap-2 w-full sm:w-auto">
-              <input
-                type="text"
-                placeholder="Nova Disciplina..."
-                value={newSubjectName}
-                onChange={(e) => setNewSubjectName(e.target.value)}
-                className="flex-1 bg-zinc-900 border border-zinc-800 text-zinc-100 px-3 sm:px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-xs sm:text-sm sm:w-64"
-              />
-              <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-2">
-                <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Adicionar</span>
-              </button>
-            </form>
+            <button 
+              onClick={() => setIsBulkAddModalOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> <span>Adicionar Matérias e Tópicos</span>
+            </button>
           </div>
         </div>
         {subjects.map(subject => {
@@ -488,6 +548,63 @@ REGRAS DE VERTICALIZAÇÃO:
           </div>
         )}
       </div>
+      {/* Bulk Add Modal */}
+      {isBulkAddModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-500/10 rounded-lg">
+                  <Plus className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-zinc-100">Adicionar em Massa</h2>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Cole sua lista abaixo</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsBulkAddModalOpen(false)}
+                className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-xl">
+                <p className="text-xs text-emerald-400 font-medium">Instruções:</p>
+                <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
+                  Cole uma lista onde cada linha segue o formato <span className="text-emerald-300 font-bold">Matéria - Assunto</span>. <br/>
+                  O sistema criará as disciplinas e tópicos automaticamente.
+                </p>
+              </div>
+
+              <textarea
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                placeholder={`Exemplo:\nPortuguês - Crase\nPortuguês - Interpretação de Texto\nDireito Constitucional - Artigo 5º\nInformática - Excel`}
+                className="w-full h-64 bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-2xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-sm font-mono placeholder:text-zinc-700 custom-scrollbar"
+              />
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleBulkAdd}
+                  disabled={!bulkText.trim()}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-6 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-emerald-600/10 active:scale-[0.98]"
+                >
+                  Importar Conteúdo
+                </button>
+                <button
+                  onClick={() => setIsBulkAddModalOpen(false)}
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-6 py-3 rounded-2xl font-bold transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

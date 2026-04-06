@@ -1,72 +1,70 @@
+import { useMemo } from 'react';
 import { useStore } from '@/store';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Target, CheckCircle2, Clock, BookOpen } from 'lucide-react';
 
 export function Dashboard() {
   const { subjects, topics, questionLogs, simulados, studySessions } = useStore();
 
-  const totalQuestionsFromLogs = questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0);
-  const totalCorrectFromLogs = questionLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0);
-  
-  // Only count manual simulados to avoid double counting AI ones (which are now in questionLogs)
-  const manualSimulados = simulados.filter(s => s.type === 'manual');
-  const totalQuestionsFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.total, 0);
-  const totalCorrectFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.score, 0);
+  const stats = useMemo(() => {
+    const totalQuestionsFromLogs = questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0);
+    const totalCorrectFromLogs = questionLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0);
+    
+    const manualSimulados = simulados.filter(s => s.type === 'manual');
+    const totalQuestionsFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.total, 0);
+    const totalCorrectFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.score, 0);
 
-  const totalQuestionsAll = totalQuestionsFromLogs + totalQuestionsFromSimulados;
-  const totalCorrectAll = totalCorrectFromLogs + totalCorrectFromSimulados;
-  
-  const totalStudySeconds = studySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0);
-  const hours = Math.floor(totalStudySeconds / 3600);
-  const minutes = Math.floor((totalStudySeconds % 3600) / 60);
+    const totalQuestionsAll = totalQuestionsFromLogs + totalQuestionsFromSimulados;
+    const totalCorrectAll = totalCorrectFromLogs + totalCorrectFromSimulados;
+    
+    const totalStudySeconds = studySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0);
+    const hours = Math.floor(totalStudySeconds / 3600);
+    const minutes = Math.floor((totalStudySeconds % 3600) / 60);
 
-  const totalTopics = topics.length;
-  const completedTopicsAll = topics.filter(t => t.status !== 'NOT_READ').length;
+    const totalTopics = topics.length;
+    const completedTopicsAll = topics.filter(t => t.status !== 'NOT_READ').length;
 
-  // Calculate performance per subject
-  const subjectPerformance = subjects.map(subject => {
-    const subjectTopics = topics.filter(t => t.subjectId === subject.id).map(t => t.id);
-    const logs = questionLogs.filter(q => subjectTopics.includes(q.topicId));
-    
-    const totalQuestions = logs.reduce((acc, curr) => acc + curr.totalQuestions, 0);
-    const correctAnswers = logs.reduce((acc, curr) => acc + curr.correctAnswers, 0);
-    
-    const percentage = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
-    
-    let status = 'Sem Dados';
-    let color = '#52525b'; // zinc-600
-    
-    if (totalQuestions > 0) {
-      if (percentage >= 85) {
-        status = 'Mestre';
-        color = '#10b981'; // emerald-500
-      } else if (percentage >= 70) {
-        status = 'Competitivo';
-        color = '#3b82f6'; // blue-500
-      } else {
-        status = 'Crítico';
-        color = '#ef4444'; // red-500
+    const subjectPerformance = subjects.map(subject => {
+      const subjectTopics = topics.filter(t => t.subjectId === subject.id).map(t => t.id);
+      const logs = questionLogs.filter(q => subjectTopics.includes(q.topicId));
+      const totalQuestions = logs.reduce((acc, curr) => acc + curr.totalQuestions, 0);
+      const correctAnswers = logs.reduce((acc, curr) => acc + curr.correctAnswers, 0);
+      const percentage = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+      
+      let status = 'Sem Dados';
+      let color = '#52525b';
+      if (totalQuestions > 0) {
+        if (percentage >= 85) { status = 'Mestre'; color = '#10b981'; }
+        else if (percentage >= 70) { status = 'Competitivo'; color = '#3b82f6'; }
+        else { status = 'Crítico'; color = '#ef4444'; }
       }
-    }
 
-    return {
-      name: subject.name,
-      percentage: Math.round(percentage),
-      totalQuestions,
-      status,
-      color,
-      completedTopics: topics.filter(t => t.subjectId === subject.id && t.status !== 'NOT_READ').length,
-      totalSubjectTopics: topics.filter(t => t.subjectId === subject.id).length
-    };
-  });
+      return {
+        name: subject.name,
+        percentage: Math.round(percentage),
+        totalQuestions,
+        status,
+        color,
+        completedTopics: topics.filter(t => t.subjectId === subject.id && t.status !== 'NOT_READ').length,
+        totalSubjectTopics: topics.filter(t => t.subjectId === subject.id).length
+      };
+    });
 
-  const simuladoData = simulados.map(s => ({
-    name: s.name,
-    score: Math.round((s.score / s.total) * 100),
-    date: format(parseISO(s.date), 'dd/MM', { locale: ptBR })
-  }));
+    const simuladoData = simulados.map(s => {
+      const dateObj = parseISO(s.date);
+      return {
+        name: s.name,
+        score: Math.round((s.score / s.total) * 100),
+        date: isValid(dateObj) ? format(dateObj, 'dd/MM', { locale: ptBR }) : 'N/A'
+      };
+    });
+
+    return { totalQuestionsAll, totalCorrectAll, hours, minutes, totalTopics, completedTopicsAll, subjectPerformance, simuladoData };
+  }, [subjects, topics, questionLogs, simulados, studySessions]);
+
+  const { totalQuestionsAll, totalCorrectAll, hours, minutes, totalTopics, completedTopicsAll, subjectPerformance, simuladoData } = stats;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -154,7 +152,7 @@ export function Dashboard() {
         {/* Simulados Evolution */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col">
           <h2 className="text-lg font-semibold text-zinc-100 mb-4">Evolução em Simulados</h2>
-          <div className="flex-1 min-h-[250px]">
+          <div className="flex-1 h-[250px] w-full mt-4">
             {simuladoData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={simuladoData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>

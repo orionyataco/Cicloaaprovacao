@@ -5,6 +5,24 @@ import { addDays, isBefore, startOfDay } from 'date-fns';
 export type TopicStatus = 'NOT_READ' | 'THEORY_DONE' | 'SUMMARY_DONE' | 'REVIEWED';
 export type ErrorReason = 'ATTENTION' | 'UNSEEN' | 'TRICK' | 'NONE';
 
+export interface GeneratedQuestion {
+  subject: string;
+  topic: string;
+  text: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+export interface SharedQuestion {
+  id: string;
+  fromName: string;
+  fromUid: string;
+  toUid: string;
+  date: string;
+  question: GeneratedQuestion;
+}
+
 export interface Subject {
   id: string;
   name: string;
@@ -95,7 +113,9 @@ interface AppState {
   userProfile: UserProfile;
   currentCycleIndex: number;
   activeTopicId: string | null;
+  autoGenerateTopicId: string | null;
   followingIds: string[]; // Lista de UIDs de amigos seguidos
+  sharedQuestions: SharedQuestion[];
   isAuthenticated: boolean;
 
   // Actions
@@ -106,6 +126,7 @@ interface AppState {
   updateTopicStatus: (id: string, status: TopicStatus) => void;
   logStudySession: (topicId: string, durationSeconds: number) => void;
   setActiveTopicId: (id: string | null) => void;
+  setAutoGenerateTopicId: (id: string | null) => void;
   addQuestionLog: (log: Omit<QuestionLog, 'id' | 'date'>) => void;
   addFlashcard: (card: Omit<Flashcard, 'id' | 'nextReviewAt' | 'interval' | 'easeFactor'>) => void;
   reviewFlashcard: (id: string, quality: number) => void;
@@ -120,6 +141,7 @@ interface AppState {
   setCurrentCycleIndex: (index: number) => void;
   followUser: (uid: string) => void;
   unfollowUser: (uid: string) => void;
+  setSharedQuestions: (questions: SharedQuestion[]) => void;
   resetAllData: () => void;
 }
 
@@ -176,7 +198,9 @@ export const useStore = create<AppState>()(
       },
       currentCycleIndex: 0,
       followingIds: [],
+      sharedQuestions: [],
       activeTopicId: null,
+      autoGenerateTopicId: null,
       isAuthenticated: false,
 
       login: () => set({ isAuthenticated: true }),
@@ -189,6 +213,7 @@ export const useStore = create<AppState>()(
       })),
 
       setActiveTopicId: (id) => set({ activeTopicId: id }),
+      setAutoGenerateTopicId: (id) => set({ autoGenerateTopicId: id }),
 
       updateTopicStatus: (id, status) => set((state) => {
         const now = new Date().toISOString();
@@ -226,30 +251,52 @@ export const useStore = create<AppState>()(
         let nextReviewAt = topic?.nextReviewAt;
         let reviewCount = topic?.reviewCount || 0;
 
-        // 24/7/30 logic
+        // 24/7/30 logic (only if it's the first time or if it's a review)
         if (topic) {
-           if (reviewCount === 0) {
-             nextReviewAt = addDays(now, 1).toISOString();
-           } else if (reviewCount === 1) {
-             nextReviewAt = addDays(now, 7).toISOString();
-           } else if (reviewCount === 2) {
-             nextReviewAt = addDays(now, 30).toISOString();
-           } else {
-             nextReviewAt = addDays(now, 30).toISOString(); // Keep 30 days after
+           // If session is very short (< 30s), don't update review metadata to avoid noise
+           if (durationSeconds > 30) {
+             if (reviewCount === 0) {
+               nextReviewAt = addDays(now, 1).toISOString();
+               reviewCount = 1;
+             } else if (reviewCount === 1) {
+               nextReviewAt = addDays(now, 7).toISOString();
+               reviewCount = 2;
+             } else if (reviewCount === 2) {
+               nextReviewAt = addDays(now, 30).toISOString();
+               reviewCount = 3;
+             } else {
+               nextReviewAt = addDays(now, 30).toISOString(); // Keep 30 days after
+               reviewCount += 1;
+             }
            }
-           reviewCount += 1;
         }
 
         return {
           studySessions: [...state.studySessions, { id: generateId(), topicId, durationSeconds, date: now.toISOString() }],
           topics: state.topics.map(t => t.id === topicId ? { ...t, lastStudiedAt: now.toISOString(), nextReviewAt, reviewCount } : t),
-          currentCycleIndex: (state.currentCycleIndex + 1) % (state.subjects.length || 1)
+          // Removido o avanço automático de ciclo aqui para evitar herança de pausas
         };
       }),
 
-      addQuestionLog: (log) => set((state) => ({
-        questionLogs: [...state.questionLogs, { ...log, id: generateId(), date: new Date().toISOString() }]
-      })),
+      addQuestionLog: (log) => set((state) => {
+        const now = new Date();
+        const topic = state.topics.find(t => t.id === log.topicId);
+        let nextReviewAt = topic?.nextReviewAt;
+        let reviewCount = topic?.reviewCount || 0;
+
+        // Se lançou desempenho, atualiza o agendamento da próxima revisão (mesma lógica 24/7/30)
+        if (topic) {
+           if (reviewCount === 0) nextReviewAt = addDays(now, 1).toISOString();
+           else if (reviewCount === 1) nextReviewAt = addDays(now, 7).toISOString();
+           else nextReviewAt = addDays(now, 30).toISOString();
+           reviewCount += 1;
+        }
+
+        return {
+          questionLogs: [...state.questionLogs, { ...log, id: generateId(), date: now.toISOString() }],
+          topics: state.topics.map(t => t.id === log.topicId ? { ...t, lastStudiedAt: now.toISOString(), nextReviewAt, reviewCount } : t)
+        };
+      }),
 
       addFlashcard: (card) => set((state) => ({
         flashcards: [...state.flashcards, { ...card, id: generateId(), nextReviewAt: new Date().toISOString(), interval: 1, easeFactor: 2.5 }]
@@ -358,6 +405,8 @@ export const useStore = create<AppState>()(
       unfollowUser: (uid) => set((state) => ({ 
         followingIds: state.followingIds.filter(id => id !== uid) 
       })),
+      
+      setSharedQuestions: (questions) => set({ sharedQuestions: questions }),
 
       resetAllData: () => set({
         subjects: [],
@@ -392,7 +441,9 @@ export const useStore = create<AppState>()(
         },
         currentCycleIndex: 0,
         followingIds: [],
+        sharedQuestions: [],
         activeTopicId: null,
+        autoGenerateTopicId: null,
       }),
     }),
     {

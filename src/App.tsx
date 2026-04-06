@@ -27,7 +27,7 @@ export default function App() {
   const navItems = [
     { id: 'dashboard', label: 'Relatórios de Performance', icon: LayoutDashboard },
     { id: 'edital', label: 'Meu Edital', icon: ListTodo },
-    { id: 'simulados', label: 'Simulados', icon: Trophy },
+    { id: 'simulados', label: 'Simulados e Questões', icon: Trophy },
     { id: 'flashcards', label: 'Banco de Flashcards', icon: BrainCircuit },
     { id: 'rankings', label: 'Rankings e Amigos', icon: Users },
   ] as const;
@@ -171,7 +171,7 @@ export default function App() {
         <div className="flex-1 overflow-y-auto p-4 lg:p-8 scroll-smooth">
           <div className="max-w-5xl mx-auto pb-24">
             {currentView === 'dashboard' && <Dashboard />}
-            {currentView === 'edital' && <Edital />}
+            {currentView === 'edital' && <Edital onViewChange={handleViewChange} />}
             {currentView === 'flashcards' && <Flashcards />}
             {currentView === 'simulados' && <Simulados />}
             {currentView === 'rankings' && <Rankings />}
