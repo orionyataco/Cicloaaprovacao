@@ -8,11 +8,8 @@ import { startOfWeek, format, parseISO } from 'date-fns';
 
 export function useFirebaseSync() {
   const store = useStore();
-  // Flag para bloquear sync enquanto carregamos dados do Firestore
   const isHydrating = useRef(false);
-  // Flag para saber se já fizemos o carregamento inicial do Firestore
   const hasHydrated = useRef(false);
-  // Ref para o timeout de debounce
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ref para unsubscriver listeners
@@ -24,6 +21,8 @@ export function useFirebaseSync() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        if (isHydrating.current || hasHydrated.current) return;
+        
         isHydrating.current = true;
         hasHydrated.current = false;
 
@@ -63,7 +62,6 @@ export function useFirebaseSync() {
             });
           } else {
             // Usuário novo — Garante que o estado local esteja limpo antes de logar
-            // para evitar herdar dados do localStorage de outro usuário
             useStore.getState().resetAllData();
             useStore.getState().login();
             console.log('[Firebase] Novo usuário, estado resetado e logado.');
@@ -72,11 +70,11 @@ export function useFirebaseSync() {
           console.error('[Firebase] Erro ao carregar dados:', error);
           useStore.getState().login();
         } finally {
-          // Aguarda 1 tick antes de liberar o sync para evitar loop
+          // Aguarda um pouco antes de liberar o sync para evitar loop
           setTimeout(() => {
             isHydrating.current = false;
             hasHydrated.current = true;
-          }, 100);
+          }, 300);
         }
       } else {
         // Usuário deslogou
@@ -98,24 +96,22 @@ export function useFirebaseSync() {
     };
   }, []);
 
-  // ────────────────────────────────────────────────
-  // Sync local → Firestore (com debounce de 2s)
-  // Só executa após o carregamento inicial do Firestore ter completado
-  // ────────────────────────────────────────────────
+  // Sync local → Firestore
   useEffect(() => {
-    // Não sincroniza se estiver hidratando do Firestore
-    // Não sincroniza se ainda não carregou os dados do Firestore
-    // Não sincroniza se o usuário não está autenticado
-    if (isHydrating.current || !hasHydrated.current || !store.isAuthenticated) return;
-
+    // Só sincroniza se:
+    // 1. Não está no meio de uma hidratação
+    // 2. A hidratação inicial já ocorreu (evita sobrescrever o banco com dados vazios ao iniciar)
+    // 3. O usuário está autenticado no Firebase
     const user = auth.currentUser;
-    if (!user) return;
+    if (isHydrating.current || !hasHydrated.current || !store.isAuthenticated || !user) {
+      return;
+    }
 
-    // Cancela o debounce anterior
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
     debounceTimer.current = setTimeout(async () => {
       try {
+        console.log('[Firebase] Iniciando sincronização...');
         const docRef = doc(db, 'users', user.uid);
         const profileRef = doc(db, 'profiles', user.uid);
 
@@ -132,6 +128,12 @@ export function useFirebaseSync() {
           customRankingStartDate, customRankingEndDate,
           ...dataToSave
         } = store;
+
+        // Validação de segurança: Se o avatar for Base64 muito grande, removemos para evitar erro do Firestore (1MB limit)
+        if (dataToSave.userProfile?.avatar && dataToSave.userProfile.avatar.length > 800000) {
+          console.warn('[Firebase] Avatar Base64 muito grande detectado. Omitindo do banco para evitar erro de limite.');
+          dataToSave.userProfile = { ...dataToSave.userProfile, avatar: null };
+        }
 
         await setDoc(docRef, dataToSave, { merge: true });
         
@@ -181,7 +183,7 @@ export function useFirebaseSync() {
           await setDoc(profileRef, {
             uid: user.uid,
             name: store.userProfile.name,
-            searchName: store.userProfile.name.toLowerCase(), // Facilitar busca case-insensitive
+            searchName: store.userProfile.name.toLowerCase(), 
             username: store.userProfile.username.toLowerCase(),
             bio: store.userProfile.bio,
             avatar: store.userProfile.avatar,
@@ -211,14 +213,26 @@ export function useFirebaseSync() {
           }, { merge: true });
         }
 
-        console.log('[Firebase] Dados sincronizados com o Firestore (privado e público).');
+        console.log('[Firebase] Sincronização concluída com sucesso (privado e público).');
       } catch (error) {
-        console.error('[Firebase] Erro ao sincronizar dados:', error);
+        console.error('[Firebase] Falha na sincronização:', error);
       }
     }, 2000);
 
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
-  }, [store]);
+  }, [
+    store.subjects, 
+    store.topics, 
+    store.questionLogs, 
+    store.flashcards, 
+    store.simulados, 
+    store.studySessions, 
+    store.editalInfo, 
+    store.scheduleConfig, 
+    store.userProfile, 
+    store.currentCycleIndex,
+    store.isAuthenticated
+  ]);
 }

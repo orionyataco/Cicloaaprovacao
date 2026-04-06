@@ -62,6 +62,41 @@ export function Account() {
     }, 100);
   };
 
+  const compressImage = (base64Str: string): Promise<Blob> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 400;
+        const MAX_HEIGHT = 400;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+        }, 'image/jpeg', 0.7);
+      };
+    });
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const user = auth.currentUser;
     if (!user) return;
@@ -78,15 +113,23 @@ export function Account() {
         // 1. Remover avatar antigo se existir no storage
         await deleteOldAvatar();
 
-        // 2. Upload para Firebase Storage em pastas por usuário
-        const avatarRef = ref(storage, `avatars/${user.uid}/${Date.now()}_${file.name}`);
-        const snapshot = await uploadBytes(avatarRef, file);
-        const downloadURL = await getDownloadURL(snapshot.ref);
+        // 2. Ler e Comprimir antes do upload
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64 = reader.result as string;
+          const compressedBlob = await compressImage(base64);
+          
+          // 3. Upload para Firebase Storage em pastas por usuário
+          const avatarRef = ref(storage, `avatars/${user.uid}/${Date.now()}_thumb.jpg`);
+          const snapshot = await uploadBytes(avatarRef, compressedBlob);
+          const downloadURL = await getDownloadURL(snapshot.ref);
 
-        // 3. Atualizar estado com a URL do storage em vez do Base64
-        setFormData({ ...formData, avatar: downloadURL });
-        // Já salva direto para o usuário não perder se fechar o app
-        updateUserProfile({ ...formData, avatar: downloadURL });
+          // 4. Atualizar estado com a URL do storage
+          setFormData({ ...formData, avatar: downloadURL });
+          updateUserProfile({ ...formData, avatar: downloadURL });
+          console.log('[Account] Imagem comprimida e enviada para o servidor.');
+        };
+        reader.readAsDataURL(file);
       } catch (err) {
         console.error('Erro no upload:', err);
         alert('Falha ao subir imagem para o servidor.');

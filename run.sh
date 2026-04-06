@@ -1,4 +1,4 @@
 #!/bin/bash
-export PATH=/home/orionyataco/.gemini/antigravity/scratch/node-v22.13.0-linux-x64/bin:$PATH
-cd /home/orionyataco/Documentos/Cicloaaprovacao-main
+# Script para iniciar o Ciclo à Aprovação localmente
+# Sincroniza e inicia o servidor e o cliente
 npm run dev:all
