@@ -189,9 +189,9 @@ export function Rankings() {
     })),
     stats: {
       totalQuestions: useStore.getState().questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0) + 
-                     useStore.getState().simulados.filter(s => s.type === 'manual').reduce((acc, curr) => acc + curr.total, 0),
+                     useStore.getState().simulados.filter(s => s.type === 'manual' || s.type === 'shared').reduce((acc, curr) => acc + curr.total, 0),
       totalCorrect: useStore.getState().questionLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0) +
-                   useStore.getState().simulados.filter(s => s.type === 'manual').reduce((acc, curr) => acc + curr.score, 0),
+                   useStore.getState().simulados.filter(s => s.type === 'manual' || s.type === 'shared').reduce((acc, curr) => acc + curr.score, 0),
       totalStudySeconds: useStore.getState().studySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0),
       completedTheories: useStore.getState().topics.filter(t => t.status !== 'NOT_READ').length,
       totalTopics: useStore.getState().topics.length
@@ -237,8 +237,8 @@ export function Rankings() {
       ...myPublicProfile,
       weeklyStats: {
         studySeconds: sumStat(useStore.getState().studySessions, 'date', 'durationSeconds'),
-        totalQuestions: sumStat(useStore.getState().questionLogs, 'date', 'totalQuestions') + sumStat(useStore.getState().simulados.filter(s => s.type === 'manual'), 'date', 'total'),
-        correctAnswers: sumStat(useStore.getState().questionLogs, 'date', 'correctAnswers') + sumStat(useStore.getState().simulados.filter(s => s.type === 'manual'), 'date', 'score')
+        totalQuestions: sumStat(useStore.getState().questionLogs, 'date', 'totalQuestions') + sumStat(useStore.getState().simulados.filter(s => s.type === 'manual' || s.type === 'shared'), 'date', 'total'),
+        correctAnswers: sumStat(useStore.getState().questionLogs, 'date', 'correctAnswers') + sumStat(useStore.getState().simulados.filter(s => s.type === 'manual' || s.type === 'shared'), 'date', 'score')
       }
     };
 

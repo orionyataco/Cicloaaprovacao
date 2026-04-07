@@ -64,7 +64,7 @@ export interface Simulado {
   name: string;
   score: number;
   total: number;
-  type: 'manual' | 'ai';
+  type: 'manual' | 'ai' | 'shared';
 }
 
 export interface EditalInfo {

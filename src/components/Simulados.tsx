@@ -2,10 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useStore } from '@/store';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, AlertTriangle, Trash2, BrainCircuit, Share2, Users } from 'lucide-react';
+import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, AlertTriangle, Trash2, BrainCircuit, Share2, Users, Search } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { db, auth } from '@/lib/firebase';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc, limit } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { GeneratedQuestion, SharedQuestion } from '@/store';
 
@@ -29,6 +29,7 @@ export function Simulados() {
   
   // Active Exam State
   const [activeExam, setActiveExam] = useState<GeneratedQuestion[]|null>(null);
+  const [activeExamType, setActiveExamType] = useState<'ai'|'shared'>('ai');
   const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
   const [examFinished, setExamFinished] = useState(false);
   const [examStartTime, setExamStartTime] = useState<number|null>(null);
@@ -38,6 +39,11 @@ export function Simulados() {
   const [questionToShare, setQuestionToShare] = useState<GeneratedQuestion|null>(null);
   const [friends, setFriends] = useState<{uid: string, name: string, username: string}[]>([]);
   const [isSharingLoading, setIsSharingLoading] = useState(false);
+  
+  // Share Modal Search State
+  const [friendSearchQuery, setFriendSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{uid: string, name: string, username: string}[]>([]);
+  const [isSearchingFriends, setIsSearchingFriends] = useState(false);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,6 +188,7 @@ RETORNE UM JSON NO FORMATO:
         const generatedQuestions = JSON.parse(cleanText) as GeneratedQuestion[];
         
         setActiveExam(generatedQuestions);
+        setActiveExamType('ai');
         setUserAnswers({});
         setExamFinished(false);
         setExamStartTime(Date.now());
@@ -260,14 +267,16 @@ RETORNE UM JSON NO FORMATO:
     });
 
     // Log each topic result to question logs
-    Object.entries(subjectResults).forEach(([topicId, result]) => {
-      addQuestionLog({
-        topicId,
-        totalQuestions: result.total,
-        correctAnswers: result.correct,
-        errorReason: 'NONE'
+    if (activeExamType !== 'shared') {
+      Object.entries(subjectResults).forEach(([topicId, result]) => {
+        addQuestionLog({
+          topicId,
+          totalQuestions: result.total,
+          correctAnswers: result.correct,
+          errorReason: 'NONE'
+        });
       });
-    });
+    }
 
     // Log study session duration
     if (examStartTime) {
@@ -282,11 +291,11 @@ RETORNE UM JSON NO FORMATO:
     }
 
     addSimulado({
-      name: `Simulado IA - ${format(new Date(), "dd/MM/yyyy HH:mm")}`,
+      name: activeExamType === 'shared' ? `Questão Compartilhada - ${format(new Date(), "dd/MM/yyyy HH:mm")}` : `Simulado IA - ${format(new Date(), "dd/MM/yyyy HH:mm")}`,
       score: correctCount,
       total: activeExam.length,
       date: new Date().toISOString(),
-      type: 'ai'
+      type: activeExamType === 'shared' ? 'shared' : 'ai'
     });
 
     setExamFinished(true);
@@ -340,6 +349,8 @@ RETORNE UM JSON NO FORMATO:
       });
       alert('Questão compartilhada com sucesso!');
       setIsShareModalOpen(false);
+      setFriendSearchQuery('');
+      setSearchResults([]);
     } catch (err) {
       console.error('Erro ao compartilhar questão:', err);
       alert('Erro ao compartilhar.');
@@ -353,6 +364,130 @@ RETORNE UM JSON NO FORMATO:
       console.error('Erro ao excluir questão compartilhada:', err);
     }
   };
+
+  const handleSearchFriends = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanQuery = friendSearchQuery.trim().replace(/^@/, '');
+    if (!cleanQuery) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearchingFriends(true);
+    try {
+      const qUsername = query(
+        collection(db, 'profiles'), 
+        where('username', '>=', cleanQuery.toLowerCase()), 
+        where('username', '<=', cleanQuery.toLowerCase() + '\uf8ff'),
+        limit(5)
+      );
+      
+      const qName = query(
+        collection(db, 'profiles'), 
+        where('searchName', '>=', cleanQuery.toLowerCase()), 
+        where('searchName', '<=', cleanQuery.toLowerCase() + '\uf8ff'),
+        limit(5)
+      );
+
+      const [snapUser, snapName] = await Promise.all([getDocs(qUsername), getDocs(qName)]);
+      const combined = [...snapUser.docs, ...snapName.docs].map(doc => ({
+        uid: doc.id,
+        name: doc.data().name,
+        username: doc.data().username
+      }));
+      
+      const uniqueResults = Array.from(new Map(combined.map(p => [p.uid, p])).values())
+        .filter(p => p.uid !== auth.currentUser?.uid);
+      
+      setSearchResults(uniqueResults);
+    } catch (err) {
+      console.error('Erro na busca de amigos:', err);
+    } finally {
+      setIsSearchingFriends(false);
+    }
+  };
+
+  const closeShareModal = () => {
+    setIsShareModalOpen(false);
+    setFriendSearchQuery('');
+    setSearchResults([]);
+  };
+
+  const displayedFriends = friendSearchQuery.trim() ? searchResults : friends;
+
+  const shareModalNode = isShareModalOpen && (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-3">
+            <Share2 className="w-6 h-6 text-blue-400" />
+            Compartilhar Questão
+          </h2>
+          <button onClick={closeShareModal} className="text-zinc-500 hover:text-zinc-300">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+        
+        <p className="text-zinc-400 text-sm mb-6 bg-zinc-950 p-4 rounded-xl border border-zinc-800 italic">
+           "{questionToShare?.text?.substring(0, 100)}..."
+        </p>
+
+        <form onSubmit={handleSearchFriends} className="relative mb-6">
+          <input 
+            type="text"
+            placeholder="Pesquisar por @usuario ou nome..."
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-4 pr-12 py-3 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-sm"
+            value={friendSearchQuery}
+            onChange={(e) => {
+              setFriendSearchQuery(e.target.value);
+              if (!e.target.value.trim()) setSearchResults([]);
+            }}
+          />
+          <button 
+            type="submit"
+            disabled={isSearchingFriends}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-zinc-500 hover:text-blue-400"
+          >
+            <Search className="w-5 h-5" />
+          </button>
+        </form>
+
+        <div className="space-y-4 max-h-[30vh] overflow-y-auto pr-2 custom-scrollbar">
+           <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              {friendSearchQuery.trim() ? 'Resultados da busca' : 'Amigos que você segue'}
+           </p>
+           {isSharingLoading || isSearchingFriends ? (
+             <div className="flex justify-center py-8">
+               <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+             </div>
+           ) : displayedFriends.length > 0 ? (
+             displayedFriends.map(friend => (
+               <button 
+                key={friend.uid}
+                onClick={() => shareWithFriend(friend.uid)}
+                className="w-full flex items-center justify-between p-4 bg-zinc-800/30 hover:bg-blue-600/10 rounded-2xl border border-zinc-800 hover:border-blue-500/30 transition-all text-left group"
+               >
+                 <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400 group-hover:text-blue-400">
+                      {friend.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-zinc-100">{friend.name}</div>
+                      <div className="text-[10px] text-zinc-500">@{friend.username}</div>
+                    </div>
+                 </div>
+                 <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-blue-400" />
+               </button>
+             ))
+           ) : (
+             <div className="text-center py-8">
+               <p className="text-zinc-500 text-sm italic">Nenhum aluno encontrado.</p>
+             </div>
+           )}
+        </div>
+      </div>
+    </div>
+  );
 
   if (isGenerating && !activeExam) {
     return (
@@ -505,6 +640,8 @@ RETORNE UM JSON NO FORMATO:
             </button>
           </div>
         )}
+        
+        {shareModalNode}
       </div>
     );
   }
@@ -566,6 +703,7 @@ RETORNE UM JSON NO FORMATO:
                 <button 
                   onClick={() => {
                     setActiveExam([shared.question]);
+                    setActiveExamType('shared');
                     setUserAnswers({});
                     setExamFinished(false);
                     setExamStartTime(Date.now());
@@ -798,58 +936,7 @@ RETORNE UM JSON NO FORMATO:
         )}
       </div>
       {/* Share Modal */}
-      {isShareModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-3">
-                <Share2 className="w-6 h-6 text-blue-400" />
-                Compartilhar Questão
-              </h2>
-              <button onClick={() => setIsShareModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <p className="text-zinc-400 text-sm mb-6 bg-zinc-950 p-4 rounded-xl border border-zinc-800 italic">
-               "{questionToShare?.text.substring(0, 100)}..."
-            </p>
-
-            <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
-               <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Para qual amigo?</p>
-               {isSharingLoading ? (
-                 <div className="flex justify-center py-8">
-                   <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                 </div>
-               ) : friends.length > 0 ? (
-                 friends.map(friend => (
-                   <button 
-                    key={friend.uid}
-                    onClick={() => shareWithFriend(friend.uid)}
-                    className="w-full flex items-center justify-between p-4 bg-zinc-800/30 hover:bg-blue-600/10 rounded-2xl border border-zinc-800 hover:border-blue-500/30 transition-all text-left group"
-                   >
-                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400 group-hover:text-blue-400">
-                          {friend.name.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="text-sm font-bold text-zinc-100">{friend.name}</div>
-                          <div className="text-[10px] text-zinc-500">@{friend.username}</div>
-                        </div>
-                     </div>
-                     <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-blue-400" />
-                   </button>
-                 ))
-               ) : (
-                 <div className="text-center py-8">
-                   <p className="text-zinc-500 text-sm italic">Você não segue nenhum amigo ainda.</p>
-                   <p className="text-[10px] text-zinc-600 mt-1">Siga outros alunos na aba Rankings para compartilhar questões.</p>
-                 </div>
-               )}
-            </div>
-          </div>
-        </div>
-      )}
+      {shareModalNode}
     </div>
   );
 }

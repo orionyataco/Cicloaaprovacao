@@ -12,7 +12,7 @@ export function Dashboard() {
     const totalQuestionsFromLogs = questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0);
     const totalCorrectFromLogs = questionLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0);
     
-    const manualSimulados = simulados.filter(s => s.type === 'manual');
+    const manualSimulados = simulados.filter(s => s.type === 'manual' || s.type === 'shared');
     const totalQuestionsFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.total, 0);
     const totalCorrectFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.score, 0);
 
