@@ -59,7 +59,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
       reader.onloadend = async () => {
         try {
           const base64String = (reader.result as string).split(',')[1];
-          const apiKey = import.meta.env.VITE_GEMINI_API_KEY?.replace(/['"]/g, '').trim();
+          const apiKey = import.meta.env.VITE_GEMINI_API_KEY_V2?.replace(/['"]/g, '').trim();
           
           if (!apiKey) {
             showToast('API Key do Gemini não configurada.', 'error');

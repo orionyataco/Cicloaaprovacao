@@ -102,7 +102,8 @@ export function Simulados() {
 
     setIsGenerating(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY?.replace(/['"]/g, '').trim();
+      // Inicializa com a chave V2
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY_V2?.replace(/['"]/g, '').trim();
       if (!apiKey) {
         alert('API Key do Gemini não configurada.');
         setIsGenerating(false);
