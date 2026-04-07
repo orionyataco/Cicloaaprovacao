@@ -126,6 +126,7 @@ export function useFirebaseSync() {
           setAutoGenerateTopicId, autoGenerateTopicId,
           setSharedQuestions, sharedQuestions,
           customRankingStartDate, customRankingEndDate,
+          toggleWeeklyRankingFriend, setCustomRankingDates,
           ...dataToSave
         } = store;
 
