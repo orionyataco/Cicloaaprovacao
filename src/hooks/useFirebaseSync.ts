@@ -125,16 +125,19 @@ export function useFirebaseSync() {
           setCurrentCycleIndex, resetAllData, followUser, unfollowUser,
           setAutoGenerateTopicId, autoGenerateTopicId,
           setSharedQuestions, sharedQuestions,
-          customRankingStartDate, customRankingEndDate,
           toggleWeeklyRankingFriend, setCustomRankingDates,
+          customRankingStartDate, customRankingEndDate,
           ...dataToSave
         } = store;
 
         // Validação de segurança: Se o avatar for Base64 muito grande, removemos para evitar erro do Firestore (1MB limit)
-        if (dataToSave.userProfile?.avatar && dataToSave.userProfile.avatar.length > 800000) {
+        const isBase64Avatar = dataToSave.userProfile?.avatar?.startsWith('data:');
+        if (isBase64Avatar && dataToSave.userProfile.avatar.length > 800000) {
           console.warn('[Firebase] Avatar Base64 muito grande detectado. Omitindo do banco para evitar erro de limite.');
           dataToSave.userProfile = { ...dataToSave.userProfile, avatar: null };
         }
+        
+        const safeAvatar = dataToSave.userProfile?.avatar || null;
 
         await setDoc(docRef, dataToSave, { merge: true });
         
@@ -187,7 +190,7 @@ export function useFirebaseSync() {
             searchName: store.userProfile.name.toLowerCase(), 
             username: store.userProfile.username.toLowerCase(),
             bio: store.userProfile.bio,
-            avatar: store.userProfile.avatar,
+            avatar: safeAvatar,
             editalInfo: {
               carreira: store.editalInfo.carreira,
               cargo: store.editalInfo.cargo,

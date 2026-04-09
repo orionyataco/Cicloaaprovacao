@@ -62,14 +62,16 @@ export function Account() {
     }, 100);
   };
 
-  const compressImage = (base64Str: string): Promise<Blob> => {
-    return new Promise((resolve) => {
+  const compressImage = (base64Str: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
       const img = new Image();
       img.src = base64Str;
+      img.onerror = () => reject(new Error('Erro ao carregar imagem para compressão'));
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 400;
-        const MAX_HEIGHT = 400;
+        // Tamanho pequeno para garantir que o Base64 caiba no Firestore (limite 1MB total doc)
+        const MAX_WIDTH = 200;
+        const MAX_HEIGHT = 200;
         let width = img.width;
         let height = img.height;
 
@@ -90,17 +92,14 @@ export function Account() {
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
         
-        canvas.toBlob((blob) => {
-          if (blob) resolve(blob);
-        }, 'image/jpeg', 0.7);
+        // Qualidade 0.6 para reduzir drásticamente o tamanho do texto
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+        resolve(compressedBase64);
       };
     });
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const user = auth.currentUser;
-    if (!user) return;
-
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
@@ -110,30 +109,30 @@ export function Account() {
       
       setUploadingAvatar(true);
       try {
-        // 1. Remover avatar antigo se existir no storage
-        await deleteOldAvatar();
-
-        // 2. Ler e Comprimir antes do upload
         const reader = new FileReader();
         reader.onloadend = async () => {
-          const base64 = reader.result as string;
-          const compressedBlob = await compressImage(base64);
-          
-          // 3. Upload para Firebase Storage em pastas por usuário
-          const avatarRef = ref(storage, `avatars/${user.uid}/${Date.now()}_thumb.jpg`);
-          const snapshot = await uploadBytes(avatarRef, compressedBlob);
-          const downloadURL = await getDownloadURL(snapshot.ref);
+          try {
+            const rawBase64 = reader.result as string;
+            // Comprime agressivamente para caber no Firestore sem erro de CORS
+            const smallBase64 = await compressImage(rawBase64);
+            
+            console.log('[Account] Imagem comprimida para Base64. Tamanho:', smallBase64.length);
 
-          // 4. Atualizar estado com a URL do storage
-          setFormData({ ...formData, avatar: downloadURL });
-          updateUserProfile({ ...formData, avatar: downloadURL });
-          console.log('[Account] Imagem comprimida e enviada para o servidor.');
+            const updatedProfile = { ...formData, avatar: smallBase64 };
+            setFormData(updatedProfile);
+            updateUserProfile(updatedProfile);
+            
+            alert('Foto de perfil atualizada!');
+          } catch (err: any) {
+            console.error('[Account] Erro na compressão:', err);
+            alert('Erro ao processar imagem.');
+          } finally {
+            setUploadingAvatar(false);
+          }
         };
         reader.readAsDataURL(file);
       } catch (err) {
-        console.error('Erro no upload:', err);
-        alert('Falha ao subir imagem para o servidor.');
-      } finally {
+        console.error('[Account] Erro ao ler arquivo:', err);
         setUploadingAvatar(false);
       }
     }
@@ -168,7 +167,7 @@ export function Account() {
                   {uploadingAvatar ? (
                     <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
                   ) : formData.avatar ? (
-                    <img src={formData.avatar} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    <img src={formData.avatar} alt="Avatar" className="w-full h-full object-cover" />
                   ) : (
                     <User className="w-10 h-10 text-zinc-700" />
                   )}

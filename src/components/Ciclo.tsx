@@ -177,6 +177,16 @@ export function Ciclo({ onViewChange }: { onViewChange: (view: any) => void }) {
                     </div>
                   ))}
                 </div>
+              ) : subjects.length > 0 && topics.length > 0 && !topics.some(t => t.status === 'NOT_READ') ? (
+                <div className="text-center py-10 flex flex-col items-center justify-center animate-in zoom-in-95 duration-500">
+                  <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                  </div>
+                  <h3 className="text-zinc-100 font-bold text-lg mb-2">Parabéns pelo estudo de hoje!</h3>
+                  <p className="text-zinc-500 text-sm max-w-[280px]">
+                    Você concluiu as teorias pendentes do dia. Descanse, e continue amanhã!
+                  </p>
+                </div>
               ) : (
                 <div className="text-center py-6 text-zinc-500 text-sm">
                   Nenhuma matéria no ciclo. Cadastre-as no Edital.

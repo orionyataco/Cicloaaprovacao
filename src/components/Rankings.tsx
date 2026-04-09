@@ -329,7 +329,7 @@ export function Rankings() {
                       className="flex items-center gap-3 flex-1 text-left"
                     >
                       <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden shrink-0">
-                        {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-700 p-1" />}
+                        {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <UserCircle className="w-full h-full text-zinc-700 p-1" />}
                       </div>
                       <div className="min-w-0 text-[10px]">
                         <div className="text-sm font-bold text-zinc-100 truncate">{profile.name}</div>
@@ -367,7 +367,7 @@ export function Rankings() {
                <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-zinc-800 border border-emerald-500/20 overflow-hidden">
-                       {myPublicProfile.avatar ? <img src={myPublicProfile.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
+                       {myPublicProfile.avatar ? <img src={myPublicProfile.avatar} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
                     </div>
                     <div>
                       <div className="text-xs font-bold text-emerald-400">{myPublicProfile.name}</div>
@@ -392,7 +392,7 @@ export function Rankings() {
                       className="flex items-center gap-3 flex-1 text-left"
                     >
                       <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 overflow-hidden shrink-0">
-                        {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
+                        {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
                       </div>
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-zinc-100 truncate">{profile.name}</div>
@@ -425,7 +425,7 @@ export function Rankings() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 overflow-hidden">
-                      {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-800" />}
+                      {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <UserCircle className="w-full h-full text-zinc-800" />}
                     </div>
                     <div className="text-left">
                       <div className="text-xs font-bold text-zinc-100">{profile.name}</div>
@@ -508,7 +508,7 @@ export function Rankings() {
                       )}>
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-zinc-950 border border-zinc-800 overflow-hidden">
-                            {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
+                            {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
                           </div>
                           <div>
                             <p className="text-sm font-bold text-zinc-100">{profile.name}</p>
@@ -581,7 +581,7 @@ export function Rankings() {
                       )}>
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-zinc-950 border border-zinc-800 overflow-hidden">
-                            {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
+                            {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
                           </div>
                           <div>
                             <p className="text-sm font-bold text-zinc-100">{profile.name}</p>
@@ -671,7 +671,7 @@ export function Rankings() {
             <header className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-zinc-950 border border-zinc-800 overflow-hidden">
-                  {selectedUser.avatar ? <img src={selectedUser.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-full h-full text-zinc-800 p-2" />}
+                  {selectedUser.avatar ? <img src={selectedUser.avatar} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <UserCircle className="w-full h-full text-zinc-800 p-2" />}
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-zinc-100">{selectedUser.name}</h2>
