@@ -33,6 +33,7 @@ export function Simulados() {
   const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
   const [examFinished, setExamFinished] = useState(false);
   const [examStartTime, setExamStartTime] = useState<number|null>(null);
+  const [activeExamCategory, setActiveExamCategory] = useState<'simulado'|'questoes'>('simulado');
 
   // Sharing State
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -54,7 +55,8 @@ export function Simulados() {
       score: Number(score),
       total: Number(total),
       date: new Date().toISOString(),
-      type: 'manual'
+      type: 'manual',
+      category: showSubjectBreakdown ? 'simulado' : 'questoes'
     });
 
     // Se houver breakdown por matéria, adiciona ao questionLog para refletir nos relatórios
@@ -138,6 +140,10 @@ export function Simulados() {
             topicos_base: topics.filter(t => t.subjectId === s.id).map(t => t.name)
           }));
       }
+
+      // Define a categoria: se houver mais de uma disciplina, é simulado. Caso contrário, é questões.
+      const category = subjectsWithTopics.length > 1 ? 'simulado' : 'questoes';
+      setActiveExamCategory(category);
 
       const prompt = `Gere um simulado de ${promptType} focado em concursos públicos para a banca ${editalInfo.banca || 'padrão'}.
 Distribuição solicitada de questões:
@@ -302,7 +308,8 @@ RETORNE UM JSON NO FORMATO:
       score: correctCount,
       total: activeExam.length,
       date: new Date().toISOString(),
-      type: activeExamType === 'shared' ? 'shared' : 'ai'
+      type: activeExamType === 'shared' ? 'shared' : 'ai',
+      category: activeExamCategory
     });
 
     setExamFinished(true);
@@ -712,8 +719,8 @@ RETORNE UM JSON NO FORMATO:
                     setActiveExam([shared.question]);
                     setActiveExamType('shared');
                     setUserAnswers({});
-                    setExamFinished(false);
                     setExamStartTime(Date.now());
+                    setActiveExamCategory('questoes');
                   }}
                   className="w-full py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 text-xs font-bold rounded-lg border border-amber-500/20 transition-all flex items-center justify-center gap-2"
                 >

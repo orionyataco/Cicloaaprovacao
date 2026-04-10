@@ -65,6 +65,7 @@ export interface Simulado {
   score: number;
   total: number;
   type: 'manual' | 'ai' | 'shared';
+  category: 'simulado' | 'questoes';
 }
 
 export interface EditalInfo {
@@ -175,8 +176,8 @@ export const useStore = create<AppState>()(
         { id: 'f2', topicId: 't3', front: 'O que é o habeas corpus?', back: 'Remédio constitucional para proteger o direito de ir e vir.', nextReviewAt: new Date().toISOString(), interval: 1, easeFactor: 2.5 },
       ],
       simulados: [
-        { id: 'sim1', date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), name: 'Simulado 01', score: 65, total: 100, type: 'manual' },
-        { id: 'sim2', date: new Date().toISOString(), name: 'Simulado 02', score: 72, total: 100, type: 'manual' },
+        { id: 'sim1', date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), name: 'Simulado 01', score: 65, total: 100, type: 'manual', category: 'simulado' },
+        { id: 'sim2', date: new Date().toISOString(), name: 'Simulado 02', score: 72, total: 100, type: 'manual', category: 'simulado' },
       ],
       studySessions: [],
       editalInfo: {
@@ -461,14 +462,6 @@ export const useStore = create<AppState>()(
         scheduleConfig: {
           activeDays: [1, 2, 3, 4, 5],
           hoursPerDay: 2,
-        },
-        userProfile: {
-          name: 'Estudante',
-          username: '',
-          bio: '',
-          birthDate: '',
-          gender: '',
-          avatar: null,
         },
         currentCycleIndex: 0,
         followingIds: [],
