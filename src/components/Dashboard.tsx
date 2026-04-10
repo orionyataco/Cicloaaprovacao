@@ -119,30 +119,59 @@ export function Dashboard() {
         {/* Heatmap / Subject Performance */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
           <h2 className="text-lg font-semibold text-zinc-100 mb-4">Mapa de Calor por Disciplina</h2>
-          <div className="space-y-4">
-            {subjectPerformance.map(subject => (
-              <div key={subject.name} className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-zinc-300 font-medium">{subject.name}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-zinc-500 text-[10px] uppercase font-bold mr-2">{subject.completedTopics}/{subject.totalSubjectTopics} temas</span>
-                    <span className="text-zinc-400 text-xs">{subject.totalQuestions} questões</span>
-                    <span className="font-mono text-zinc-100">{subject.percentage}%</span>
+          <div className="space-y-8">
+            {subjectPerformance.map(subject => {
+              const subjectTopics = topics.filter(t => t.subjectId === subjects.find(s => s.name === subject.name)?.id);
+              
+              const topicDetails = subjectTopics.map(topic => {
+                const logs = questionLogs.filter(q => q.topicId === topic.id);
+                const tQuestions = logs.reduce((acc, curr) => acc + curr.totalQuestions, 0);
+                const tCorrect = logs.reduce((acc, curr) => acc + curr.correctAnswers, 0);
+                const tPercentage = tQuestions > 0 ? (tCorrect / tQuestions) * 100 : 0;
+                
+                let tColor = '#18181b'; // Base zinc-950
+                if (tQuestions > 0) {
+                  if (tPercentage >= 85) tColor = '#10b981'; // Emerald
+                  else if (tPercentage >= 70) tColor = '#3b82f6'; // Blue
+                  else tColor = '#ef4444'; // Red
+                } else if (topic.status !== 'NOT_READ') {
+                  tColor = '#3f3f46'; // Zinc-700 (Studied but no questions)
+                }
+
+                return { name: topic.name, color: tColor, percentage: Math.round(tPercentage), total: tQuestions };
+              });
+
+              return (
+                <div key={subject.name} className="space-y-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-300 font-bold">{subject.name}</span>
+                    <div className="flex items-center gap-2">
+                       <span className="text-zinc-500 text-[10px] uppercase font-bold mr-2">{subject.completedTopics}/{subject.totalSubjectTopics} temas</span>
+                       <span className="font-mono text-zinc-100">{subject.percentage}%</span>
+                    </div>
+                  </div>
+                  
+                  {/* Heatmap Grid */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {topicDetails.map((td, i) => (
+                      <div 
+                        key={i}
+                        title={`${td.name}: ${td.total > 0 ? td.percentage + '%' : 'Sem questões'}`}
+                        className="w-4 h-4 rounded-sm transition-all hover:scale-125 hover:z-10 cursor-help border border-white/5"
+                        style={{ backgroundColor: td.color }}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="h-1.5 w-full bg-zinc-800/50 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full rounded-full transition-all duration-1000 ease-out"
+                      style={{ width: `${subject.percentage}%`, backgroundColor: subject.color }}
+                    />
                   </div>
                 </div>
-                <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full rounded-full transition-all duration-1000 ease-out"
-                    style={{ width: `${subject.percentage}%`, backgroundColor: subject.color }}
-                  />
-                </div>
-                <div className="flex justify-end">
-                  <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: subject.color }}>
-                    {subject.status}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {subjectPerformance.length === 0 && (
               <div className="text-zinc-500 text-center py-4 text-sm">Nenhuma disciplina cadastrada.</div>
             )}

@@ -113,6 +113,8 @@ interface AppState {
   currentCycleIndex: number;
   activeTopicId: string | null;
   autoGenerateTopicId: string | null;
+  autoGenerateSubjectId: string | null;
+  autoGenerateCount: number;
   followingIds: string[]; // Lista de UIDs de amigos seguidos
   weeklyRankingFriendIds: string[]; // Lista de UIDs de amigos para o ranking personalizado
   customRankingStartDate: string | null;
@@ -128,7 +130,8 @@ interface AppState {
   updateTopicStatus: (id: string, status: TopicStatus) => void;
   logStudySession: (topicId: string, durationSeconds: number) => void;
   setActiveTopicId: (id: string | null) => void;
-  setAutoGenerateTopicId: (id: string | null) => void;
+  setAutoGenerateTopicId: (id: string | null, count?: number) => void;
+  setAutoGenerateSubjectId: (id: string | null, count?: number) => void;
   addQuestionLog: (log: Omit<QuestionLog, 'id' | 'date'>) => void;
   addFlashcard: (card: Omit<Flashcard, 'id' | 'nextReviewAt' | 'interval' | 'easeFactor'>) => void;
   reviewFlashcard: (id: string, quality: number) => void;
@@ -207,6 +210,8 @@ export const useStore = create<AppState>()(
       sharedQuestions: [],
       activeTopicId: null,
       autoGenerateTopicId: null,
+      autoGenerateSubjectId: null,
+      autoGenerateCount: 3,
       isAuthenticated: false,
 
       login: () => set({ isAuthenticated: true }),
@@ -219,7 +224,16 @@ export const useStore = create<AppState>()(
       })),
 
       setActiveTopicId: (id) => set({ activeTopicId: id }),
-      setAutoGenerateTopicId: (id) => set({ autoGenerateTopicId: id }),
+      setAutoGenerateTopicId: (id, count) => set({ 
+        autoGenerateTopicId: id, 
+        autoGenerateCount: count || 3,
+        autoGenerateSubjectId: null 
+      }),
+      setAutoGenerateSubjectId: (id, count) => set({ 
+        autoGenerateSubjectId: id, 
+        autoGenerateCount: count || 3,
+        autoGenerateTopicId: null 
+      }),
 
       updateTopicStatus: (id, status) => set((state) => {
         const now = new Date().toISOString();
@@ -464,6 +478,8 @@ export const useStore = create<AppState>()(
         sharedQuestions: [],
         activeTopicId: null,
         autoGenerateTopicId: null,
+        autoGenerateSubjectId: null,
+        autoGenerateCount: 0,
       }),
     }),
     {

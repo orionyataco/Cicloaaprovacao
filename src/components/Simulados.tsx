@@ -12,7 +12,7 @@ import { GeneratedQuestion, SharedQuestion } from '@/store';
 // Removido interface GeneratedQuestion local pois foi movida para o store.ts
 
 export function Simulados() {
-  const { simulados, addSimulado, deleteSimulado, subjects, topics, editalInfo, addFlashcard, addQuestionLog, logStudySession, autoGenerateTopicId, setAutoGenerateTopicId, followingIds, sharedQuestions, userProfile } = useStore();
+  const { simulados, addSimulado, deleteSimulado, subjects, topics, editalInfo, addFlashcard, addQuestionLog, logStudySession, autoGenerateTopicId, setAutoGenerateTopicId, autoGenerateSubjectId, setAutoGenerateSubjectId, autoGenerateCount, followingIds, sharedQuestions, userProfile } = useStore();
   const [isAdding, setIsAdding] = useState(false);
   const [name, setName] = useState('');
   const [score, setScore] = useState('');
@@ -91,7 +91,7 @@ export function Simulados() {
 
   const totalRequestedQuestions = Object.values(distribution).reduce((a: number, b: number) => a + b, 0);
 
-  const generateExam = useCallback(async (overrideDistribution?: Record<string, number>, targetTopicId?: string) => {
+  const generateExam = useCallback(async (overrideDistribution?: Record<string, number>, targetTopicId?: string, forceCount?: number) => {
     const dist = overrideDistribution || distribution;
     const total = Object.values(dist).reduce((a: number, b: number) => a + b, 0);
 
@@ -126,7 +126,7 @@ export function Simulados() {
         const subject = subjects.find(s => s.id === topic?.subjectId);
         subjectsWithTopics = [{
           disciplina: subject?.name || 'Assunto',
-          quantidade_questoes: 3,
+          quantidade_questoes: forceCount || 3,
           topicos_base: [topic?.name || 'Tema']
         }];
       } else {
@@ -213,11 +213,17 @@ RETORNE UM JSON NO FORMATO:
     if (autoGenerateTopicId) {
       const topic = topics.find(t => t.id === autoGenerateTopicId);
       if (topic) {
-        generateExam({ [topic.subjectId]: 3 }, topic.id);
+        generateExam({ [topic.subjectId]: autoGenerateCount }, topic.id, autoGenerateCount);
       }
       setAutoGenerateTopicId(null);
+    } else if (autoGenerateSubjectId) {
+      const subject = subjects.find(s => s.id === autoGenerateSubjectId);
+      if (subject) {
+        generateExam({ [subject.id]: autoGenerateCount }, undefined, autoGenerateCount);
+      }
+      setAutoGenerateSubjectId(null);
     }
-  }, [autoGenerateTopicId, topics, generateExam, setAutoGenerateTopicId]);
+  }, [autoGenerateTopicId, autoGenerateSubjectId, autoGenerateCount, topics, subjects, generateExam, setAutoGenerateTopicId, setAutoGenerateSubjectId]);
 
   const finishExam = () => {
     if (!activeExam) return;

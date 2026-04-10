@@ -1,14 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { useStore, TopicStatus, EditalInfo } from '@/store';
-import { Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, FileText, RefreshCw, Upload, Loader2, Trash2, AlertTriangle, Edit2, Save, X, Info, ExternalLink, CalendarDays, CalendarClock } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, FileText, RefreshCw, Upload, Loader2, Trash2, AlertTriangle, Edit2, Save, X, Info, ExternalLink, CalendarDays, CalendarClock, Brain } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Ciclo } from './Ciclo';
 import { Cronograma } from './Cronograma';
 
 export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) {
-  const { subjects, topics, addSubject, addTopic, updateTopicStatus, importEdital, deleteSubject, deleteAllSubjects, editalInfo, updateEditalInfo, setActiveTopicId, activeTopicId } = useStore();
+  const { subjects, topics, addSubject, addTopic, updateTopicStatus, importEdital, deleteSubject, deleteAllSubjects, editalInfo, updateEditalInfo, setActiveTopicId, activeTopicId, setAutoGenerateTopicId, setAutoGenerateSubjectId } = useStore();
   const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
+  const [genCounts, setGenCounts] = useState<Record<string, number>>({});
   const [isBulkAddModalOpen, setIsBulkAddModalOpen] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const [newSubjectName, setNewSubjectName] = useState('');
@@ -447,9 +448,33 @@ REGRAS DE VERTICALIZAÇÃO:
                   <span className="font-semibold text-zinc-100">{subject.name}</span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="text-sm text-zinc-500">
-                    {subjectTopics.length} tópicos
+                  <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg p-1">
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="20" 
+                      value={genCounts[subject.id] || 3}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        setGenCounts(prev => ({ ...prev, [subject.id]: parseInt(e.target.value) || 1 }));
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-10 bg-transparent text-center text-xs font-bold text-zinc-100 focus:outline-none"
+                    />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAutoGenerateSubjectId(subject.id, genCounts[subject.id] || 3);
+                        onViewChange('simulados');
+                      }}
+                      className="p-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-md transition-all flex items-center gap-1.5"
+                      title="Gerar questões desta matéria"
+                    >
+                      <Brain className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold uppercase">Gerar</span>
+                    </button>
                   </div>
+
                   {confirmDelete === subject.id ? (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-red-400 font-medium">Excluir?</span>
@@ -490,6 +515,29 @@ REGRAS DE VERTICALIZAÇÃO:
                       </button>
                       
                       <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-700/50 rounded-lg p-0.5">
+                          <input 
+                            type="number" 
+                            min="1" 
+                            max="10" 
+                            value={genCounts[topic.id] || 3}
+                            onChange={(e) => {
+                              setGenCounts(prev => ({ ...prev, [topic.id]: parseInt(e.target.value) || 1 }));
+                            }}
+                            className="w-8 bg-transparent text-center text-[10px] font-bold text-zinc-300 focus:outline-none"
+                          />
+                          <button
+                            onClick={() => {
+                              setAutoGenerateTopicId(topic.id, genCounts[topic.id] || 3);
+                              onViewChange('simulados');
+                            }}
+                            className="p-1 hover:bg-emerald-500/10 text-emerald-500/60 hover:text-emerald-400 rounded transition-all"
+                            title="Gerar questões deste assunto"
+                          >
+                            <Brain className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
                         <select
                           value={topic.status}
                           onChange={(e) => updateTopicStatus(topic.id, e.target.value as TopicStatus)}
