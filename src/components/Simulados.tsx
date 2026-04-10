@@ -105,19 +105,25 @@ export function Simulados() {
     setIsGenerating(true);
     try {
       // Inicializa com a chave V2
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY_V2?.replace(/['"]/g, '').trim();
+      // Priorizamos a V2 que vimos no seu .env
+      const apiKey = (import.meta.env.VITE_GEMINI_API_KEY_V2 || import.meta.env.VITE_GEMINI_API_KEY)?.replace(/['"]/g, '').trim();
+      
       if (!apiKey) {
-        alert('API Key do Gemini não configurada.');
+        alert('API Key V2 não encontrada no .env');
         setIsGenerating(false);
         return;
       }
 
+      console.log('Usando Chave API (final):', apiKey.substring(0, 10) + '...');
       const genAI = new GoogleGenerativeAI(apiKey);
-      // Tentativa 1: Flash Latest
+      
+      // Usando a versão Lite do 2.5 para evitar sobrecarga (erro 503) no servidor
+      const modelId = "gemini-2.5-flash-lite"; 
+      console.log('Tentando versão Lite (mais estável):', modelId);
+
       const model = genAI.getGenerativeModel({ 
-        model: "gemini-2.5-flash",
-        generationConfig: { responseMimeType: "application/json" }
-      });
+        model: modelId
+      }, { apiVersion: 'v1' });
       
       const isCespe = editalInfo.banca.toLowerCase().includes('cespe') || editalInfo.banca.toLowerCase().includes('cebraspe');
       const promptType = isCespe ? 'Certo/Errado (2 alternativas)' : 'múltipla escolha (5 alternativas)';
@@ -141,7 +147,6 @@ export function Simulados() {
           }));
       }
 
-      // Define a categoria: se houver mais de uma disciplina, é simulado. Caso contrário, é questões.
       const category = subjectsWithTopics.length > 1 ? 'simulado' : 'questoes';
       setActiveExamCategory(category);
 
@@ -149,14 +154,11 @@ export function Simulados() {
 Distribuição solicitada de questões:
 ${JSON.stringify(subjectsWithTopics, null, 2)}
 
-Crie questões desafiadoras, focadas EXCLUSIVAMENTE nos tópicos listados para cada disciplina.
-IMPORTANTE: Utilize PRIORITARIAMENTE os nomes de disciplinas e tópicos exatamente como fornecidos no JSON acima para os campos "subject" e "topic".
-
-RETORNE UM JSON NO FORMATO:
+RETORNE APENAS O ARRAY JSON, SEM TEXTO ADICIONAL, NO FORMATO:
 [
   {
-    "subject": "Nome da disciplina (exatamente como fornecido)",
-    "topic": "Tópico abordado (exatamente como fornecido)",
+    "subject": "Nome da disciplina",
+    "topic": "Tópico abordado",
     "text": "Enunciado da questão",
     "options": ["Opção A", "Opção B", ...],
     "correctIndex": 0,
@@ -169,29 +171,14 @@ RETORNE UM JSON NO FORMATO:
         const result = await model.generateContent(prompt);
         response = await result.response;
       } catch (err: any) {
-        console.error('Primeira tentativa (1.5-flash) falhou:', err);
-        const errMsg = err.message || '';
-        if (errMsg.includes('API key') || errMsg.includes('API_KEY_INVALID') || errMsg.includes('expired')) {
-           throw new Error('CHAVE INVÁLIDA: A API Key do Gemini está expirada ou incorreta. Crie uma nova em aistudio.google.com/app/apikey e atualize o .env');
-        }
-
-        console.log('Modelo Flash principal falhou. Tentando modelo pro...');
-        try {
-          const fallbackModel = genAI.getGenerativeModel({ 
-            model: "gemini-2.5-pro",
-            generationConfig: { responseMimeType: "application/json" }
-          });
-          const result = await fallbackModel.generateContent(prompt);
-          response = await result.response;
-        } catch (fallbackErr: any) {
-          console.error('Tentativa com 8b também falhou:', fallbackErr);
-          throw new Error(`Falha na IA.\nErro modelo principal: ${errMsg}\nErro fallback: ${fallbackErr.message}`);
-        }
+        console.error(`Erro na chamada ao ${modelId}:`, err);
+        throw new Error(`Falha na IA (${modelId}): ${err.message}`);
       }
+      
       const responseText = response.text();
-
       if (responseText) {
-        const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        const cleanText = jsonMatch ? jsonMatch[0] : responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         const generatedQuestions = JSON.parse(cleanText) as GeneratedQuestion[];
         
         setActiveExam(generatedQuestions);
@@ -205,11 +192,7 @@ RETORNE UM JSON NO FORMATO:
       }
     } catch (error: any) {
       console.error('Erro ao gerar simulado:', error);
-      let errorMsg = 'Erro ao gerar o simulado.';
-      if (error.message?.includes('503')) errorMsg = 'IA Temporariamente Indisponível (Sobrecarregada). Tente novamente em alguns segundos.';
-      else if (error.message?.includes('429')) errorMsg = 'Limite de uso da IA excedido. Tente novamente em um minuto.';
-      else if (error.message?.includes('403') || error.message?.includes('CHAVE INVÁLIDA')) errorMsg = 'Erro de autenticação: API Key inválida ou expirada.';
-      alert(`${errorMsg}\n\nDetalhes: ${error.message || ''}`);
+      alert(`Erro: ${error.message}`);
     } finally {
       setIsGenerating(false);
     }

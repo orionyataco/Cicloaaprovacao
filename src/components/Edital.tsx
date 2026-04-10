@@ -60,7 +60,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
       reader.onloadend = async () => {
         try {
           const base64String = (reader.result as string).split(',')[1];
-          const apiKey = import.meta.env.VITE_GEMINI_API_KEY_V2?.replace(/['"]/g, '').trim();
+          const apiKey = (import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY_V2)?.replace(/['"]/g, '').trim();
           
           if (!apiKey) {
             showToast('API Key do Gemini não configurada.', 'error');
@@ -69,11 +69,9 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
           }
           
           const genAI = new GoogleGenerativeAI(apiKey);
-          // Primeira tentativa: Flash Latest
           const model = genAI.getGenerativeModel({ 
-            model: "gemini-2.5-flash",
-            generationConfig: { responseMimeType: "application/json" }
-          });
+            model: "gemini-2.5-flash-lite"
+          }, { apiVersion: 'v1' });
 
           console.log(`Iniciando análise com Gemini 2.0. Arquivo: ${file.name}`);
           
@@ -112,9 +110,8 @@ REGRAS DE VERTICALIZAÇÃO:
              console.log('Tentando modelo alternativo (gemini-1.5-pro)...');
              try {
                const fallbackModel = genAI.getGenerativeModel({ 
-                 model: "gemini-2.5-pro", 
-                 generationConfig: { responseMimeType: "application/json" } 
-               });
+                 model: "gemini-2.5-flash-lite"
+               }, { apiVersion: 'v1' });
                const result = await fallbackModel.generateContent([
                  { inlineData: { data: base64String, mimeType: file.type } },
                  { text: prompt }
@@ -438,9 +435,9 @@ REGRAS DE VERTICALIZAÇÃO:
           
           return (
             <div key={subject.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-              <button 
+              <div 
+                className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/50 transition-colors cursor-pointer group/subject"
                 onClick={() => toggleSubject(subject.id)}
-                className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/50 transition-colors"
               >
                 <div className="flex items-center gap-3">
                   {isExpanded ? <ChevronDown className="w-5 h-5 text-zinc-500" /> : <ChevronRight className="w-5 h-5 text-zinc-500" />}
@@ -448,17 +445,15 @@ REGRAS DE VERTICALIZAÇÃO:
                   <span className="font-semibold text-zinc-100">{subject.name}</span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg p-1">
+                  <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg p-1" onClick={(e) => e.stopPropagation()}>
                     <input 
                       type="number" 
                       min="1" 
                       max="20" 
                       value={genCounts[subject.id] || 3}
                       onChange={(e) => {
-                        e.stopPropagation();
                         setGenCounts(prev => ({ ...prev, [subject.id]: parseInt(e.target.value) || 1 }));
                       }}
-                      onClick={(e) => e.stopPropagation()}
                       className="w-10 bg-transparent text-center text-xs font-bold text-zinc-100 focus:outline-none"
                     />
                     <button
@@ -491,7 +486,7 @@ REGRAS DE VERTICALIZAÇÃO:
                     </div>
                   )}
                 </div>
-              </button>
+              </div>
 
               {isExpanded && (
                 <div className="border-t border-zinc-800 p-4 bg-zinc-900/50 space-y-2">
