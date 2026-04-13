@@ -3,7 +3,7 @@ import { auth, db } from '../lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useStore } from '../store';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, limit } from 'firebase/firestore';
 import { startOfWeek, format, parseISO } from 'date-fns';
 
 export function useFirebaseSync() {
@@ -14,6 +14,7 @@ export function useFirebaseSync() {
 
   // Ref para unsubscriver listeners
   const sharedQuestionsUnsubscribe = useRef<(() => void) | null>(null);
+  const notificationsUnsubscribe = useRef<(() => void) | null>(null);
 
   // ────────────────────────────────────────────────
   // Listener de autenticação: carrega dados do Firestore
@@ -32,33 +33,69 @@ export function useFirebaseSync() {
 
           if (docSnap.exists()) {
             const remoteData = docSnap.data();
-            // Sobrescreve o estado local com os dados do Firebase
-            // sem disparar o sync de volta
-            useStore.setState({
-              subjects: remoteData.subjects ?? [],
-              topics: remoteData.topics ?? [],
-              questionLogs: remoteData.questionLogs ?? [],
-              flashcards: remoteData.flashcards ?? [],
-              simulados: remoteData.simulados ?? [],
-              studySessions: remoteData.studySessions ?? [],
-              editalInfo: remoteData.editalInfo ?? useStore.getState().editalInfo,
-              scheduleConfig: remoteData.scheduleConfig ?? useStore.getState().scheduleConfig,
-              userProfile: remoteData.userProfile ?? useStore.getState().userProfile,
-              followingIds: remoteData.followingIds ?? [],
-              weeklyRankingFriendIds: remoteData.weeklyRankingFriendIds ?? [],
-              customRankingStartDate: remoteData.customRankingStartDate ?? null,
-              customRankingEndDate: remoteData.customRankingEndDate ?? null,
-              currentCycleIndex: remoteData.currentCycleIndex ?? 0,
-              activeTopicId: remoteData.activeTopicId ?? null,
-              isAuthenticated: true,
-            });
-            console.log('[Firebase] Dados carregados do Firestore.');
+            const localLastUpdate = useStore.getState().lastUpdate;
+            const remoteLastUpdate = remoteData.lastUpdate;
+
+            console.log(`[Firebase] Checando sincronização: Local(${localLastUpdate}) vs Remoto(${remoteLastUpdate})`);
+
+            // Só carrega se o banco estiver mais novo ou se local estiver zerado
+            const shouldOverwrite = !localLastUpdate || 
+                                    (remoteLastUpdate && new Date(remoteLastUpdate) > new Date(localLastUpdate));
+
+            if (shouldOverwrite) {
+              console.log('[Firebase] ⬇️ Dados remotos são mais novos. Atualizando estado local...');
+              // Sobrescreve o estado local com os dados do Firebase
+              useStore.setState({
+                subjects: remoteData.subjects ?? [],
+                topics: remoteData.topics ?? [],
+                questionLogs: remoteData.questionLogs ?? [],
+                flashcards: remoteData.flashcards ?? [],
+                simulados: remoteData.simulados ?? [],
+                studySessions: remoteData.studySessions ?? [],
+                editalInfo: remoteData.editalInfo ?? useStore.getState().editalInfo,
+                scheduleConfig: remoteData.scheduleConfig ?? useStore.getState().scheduleConfig,
+                userProfile: remoteData.userProfile ?? useStore.getState().userProfile,
+                followingIds: remoteData.followingIds ?? [],
+                weeklyRankingFriendIds: remoteData.weeklyRankingFriendIds ?? [],
+                customRankingStartDate: remoteData.customRankingStartDate ?? null,
+                customRankingEndDate: remoteData.customRankingEndDate ?? null,
+                currentCycleIndex: remoteData.currentCycleIndex ?? 0,
+                activeTopicId: remoteData.activeTopicId ?? null,
+                notifications: remoteData.notifications ?? [],
+                lastUpdate: remoteData.lastUpdate ?? null,
+                isAuthenticated: true,
+              });
+            } else {
+              console.log('[Firebase] ⬆️ Dados locais são mais recentes ou iguais. Mantendo estado atual para sincronizar em breve.');
+              useStore.getState().login();
+            }
 
             // Inicia escuta de questões compartilhadas
             const q = query(collection(db, 'shared_questions'), where('toUid', '==', user.uid));
             sharedQuestionsUnsubscribe.current = onSnapshot(q, (snapshot) => {
               const sharedDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
               useStore.getState().setSharedQuestions(sharedDocs);
+            });
+
+            // Ouve notificações sociais (ex: novos seguidores)
+            const nq = query(collection(db, 'notifications'), where('toUid', '==', user.uid), limit(20));
+            notificationsUnsubscribe.current = onSnapshot(nq, (snapshot) => {
+              snapshot.docChanges().forEach((change) => {
+                if (change.type === "added") {
+                  const notif = { id: change.doc.id, ...change.doc.data() } as any;
+                  // Se a notificação for nova (adicionada após o login)
+                  const existing = useStore.getState().notifications.find(n => n.id === notif.id);
+                  if (!existing) {
+                    useStore.getState().addNotification({
+                      type: notif.type,
+                      title: notif.title,
+                      message: notif.message,
+                      fromUid: notif.fromUid,
+                      link: notif.link
+                    });
+                  }
+                }
+              });
             });
           } else {
             // Usuário novo — Garante que o estado local esteja limpo antes de logar
@@ -86,13 +123,18 @@ export function useFirebaseSync() {
           sharedQuestionsUnsubscribe.current();
           sharedQuestionsUnsubscribe.current = null;
         }
-        console.log('[Firebase] Usuário deslogado e estado local resetado.');
+        if (notificationsUnsubscribe.current) {
+          notificationsUnsubscribe.current();
+          notificationsUnsubscribe.current = null;
+        }
+        console.log('[Firebase] Usuário deslogado.');
       }
     });
 
     return () => {
       unsubscribe();
       if (sharedQuestionsUnsubscribe.current) sharedQuestionsUnsubscribe.current();
+      if (notificationsUnsubscribe.current) notificationsUnsubscribe.current();
     };
   }, []);
 
@@ -111,11 +153,12 @@ export function useFirebaseSync() {
 
     debounceTimer.current = setTimeout(async () => {
       try {
-        console.log('[Firebase] Iniciando sincronização...');
+        const now = new Date().toISOString();
+        console.log(`[Firebase] ✨ Iniciando sincronização (${now})...`);
         const docRef = doc(db, 'users', user.uid);
         const profileRef = doc(db, 'profiles', user.uid);
 
-        // Extrai apenas os dados (sem as funções/actions)
+        // Extrai apenas as funções/ações para salvar apenas o estado no Firestore
         const {
           login, logout, addSubject, addTopic, updateTopicStatus,
           logStudySession, setActiveTopicId, addQuestionLog,
@@ -123,10 +166,9 @@ export function useFirebaseSync() {
           importEdital, deleteSubject, deleteAllSubjects,
           updateEditalInfo, updateScheduleConfig, updateUserProfile,
           setCurrentCycleIndex, resetAllData, followUser, unfollowUser,
-          setAutoGenerateTopicId, autoGenerateTopicId,
-          setSharedQuestions, sharedQuestions,
+          setAutoGenerateTopicId, setSharedQuestions, sharedQuestions,
           toggleWeeklyRankingFriend, setCustomRankingDates,
-          customRankingStartDate, customRankingEndDate,
+          addNotification, markNotificationAsRead, deleteNotification, setNotifications,
           ...dataToSave
         } = store;
 
@@ -139,7 +181,13 @@ export function useFirebaseSync() {
         
         const safeAvatar = dataToSave.userProfile?.avatar || null;
 
-        await setDoc(docRef, dataToSave, { merge: true });
+        // Atualiza o lastUpdate no estado local para que o próximo sync/refresh saiba
+        useStore.setState({ lastUpdate: now });
+
+        await setDoc(docRef, { 
+          ...dataToSave,
+          lastUpdate: now 
+        }, { merge: true });
         
         // ────────────────────────────────────────────────
         // Public Profiling: Sync basic summary stats
@@ -147,7 +195,7 @@ export function useFirebaseSync() {
         if (store.userProfile.username) {
           const totalQuestionsFromLogs = store.questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0);
           const totalCorrectFromLogs = store.questionLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0);
-          const manualSimulados = store.simulados.filter(s => s.type === 'manual');
+          const manualSimulados = store.simulados.filter(s => s.type === 'manual' || s.type === 'shared');
           const totalQuestionsFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.total, 0);
           const totalCorrectFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.score, 0);
 
@@ -206,7 +254,7 @@ export function useFirebaseSync() {
               totalStudySeconds,
               completedTheories,
               totalTopics,
-              lastUpdate: new Date().toISOString()
+              lastUpdate: now
             },
             weeklyStats: {
               weekId,
@@ -217,11 +265,11 @@ export function useFirebaseSync() {
           }, { merge: true });
         }
 
-        console.log('[Firebase] Sincronização concluída com sucesso (privado e público).');
+        console.log(`[Firebase] ✅ Sincronização concluída com sucesso (${new Date().toISOString()}).`);
       } catch (error) {
-        console.error('[Firebase] Falha na sincronização:', error);
+        console.error('[Firebase] ❌ Falha na sincronização:', error);
       }
-    }, 2000);
+    }, 1000);
 
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -237,6 +285,11 @@ export function useFirebaseSync() {
     store.scheduleConfig, 
     store.userProfile, 
     store.currentCycleIndex,
+    store.followingIds,
+    store.weeklyRankingFriendIds,
+    store.customRankingStartDate,
+    store.customRankingEndDate,
+    store.notifications,
     store.isAuthenticated
   ]);
 }

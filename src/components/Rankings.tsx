@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store';
 import { db, auth } from '@/lib/firebase';
-import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, orderBy, addDoc } from 'firebase/firestore';
 import { Search, UserPlus, UserMinus, Trophy, Target, Clock, BookOpen, ChevronRight, UserCircle, X, LayoutDashboard, Target as TargetIcon, Globe, Plus, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { startOfWeek, parseISO } from 'date-fns';
@@ -128,6 +128,41 @@ export function Rankings() {
     };
     fetchGlobal();
   }, []);
+
+  const handleFollowAction = async (targetUid: string, targetName: string) => {
+    followUser(targetUid);
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        toUid: targetUid,
+        fromUid: auth.currentUser?.uid,
+        type: 'follow',
+        title: 'Novo seguidor!',
+        message: `${userProfile.name} começou a seguir você.`,
+        date: new Date().toISOString(),
+        read: false
+      });
+    } catch (err) {
+      console.error('Erro ao enviar notificação de follow:', err);
+    }
+  };
+
+  const handleImportAction = async (targetUid: string, targetName: string, editalData: any) => {
+    importEdital(editalData);
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        toUid: targetUid,
+        fromUid: auth.currentUser?.uid,
+        type: 'system',
+        title: 'Edital Copiado!',
+        message: `${userProfile.name} copiou a estrutura do seu edital.`,
+        date: new Date().toISOString(),
+        read: false
+      });
+    } catch (err) {
+      console.error('Erro ao enviar notificação de cópia:', err);
+    }
+    showToast('Edital importado com sucesso!', 'success');
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -353,7 +388,7 @@ export function Rankings() {
                         </button>
                       </div>
                     ) : (
-                      <button onClick={() => followUser(profile.uid)} className="p-2 text-emerald-400 hover:bg-emerald-400/10 rounded-lg">
+                      <button onClick={() => handleFollowAction(profile.uid, profile.name)} className="p-2 text-emerald-400 hover:bg-emerald-400/10 rounded-lg">
                         <UserPlus className="w-5 h-5" />
                       </button>
                     )}
@@ -403,7 +438,7 @@ export function Rankings() {
                       followingIds.includes(profile.uid) ? (
                         <button onClick={() => unfollowUser(profile.uid)} className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded-md">Seguindo</button>
                       ) : (
-                        <button onClick={() => followUser(profile.uid)} className="text-[10px] bg-blue-600/10 text-blue-400 px-2 py-1 rounded-md border border-blue-500/30">Seguir</button>
+                        <button onClick={() => handleFollowAction(profile.uid, profile.name)} className="text-[10px] bg-blue-600/10 text-blue-400 px-2 py-1 rounded-md border border-blue-500/30">Seguir</button>
                       )
                     )}
                 </div>
@@ -720,8 +755,7 @@ export function Rankings() {
                      <button 
                         onClick={() => {
                           if (confirm(`Deseja importar os ${selectedUser.editalStructure?.length} assuntos e seus respectivos tópicos para o seu Edital? Isso será adicionado à sua lista atual.`)) {
-                            importEdital(selectedUser.editalStructure!);
-                            alert('Edital importado com sucesso!');
+                            handleImportAction(selectedUser.uid, selectedUser.name, selectedUser.editalStructure!);
                           }
                         }}
                         className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20 active:scale-95"
@@ -837,7 +871,7 @@ export function Rankings() {
                 </button>
               ) : (
                 <button 
-                  onClick={() => followUser(selectedUser.uid)}
+                  onClick={() => handleFollowAction(selectedUser.uid, selectedUser.name)}
                   className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
                 >
                   <UserPlus className="w-5 h-5" /> Seguir Aluno

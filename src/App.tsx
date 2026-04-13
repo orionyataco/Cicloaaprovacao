@@ -14,6 +14,7 @@ import { signOut } from 'firebase/auth';
 import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle, LogOut, Users } from 'lucide-react';
 import { Rankings } from './components/Rankings';
 import { cn } from './lib/utils';
+import { NotificationCenter } from './components/NotificationCenter';
 
 type View = 'dashboard' | 'edital' | 'flashcards' | 'simulados' | 'account' | 'rankings';
 
@@ -160,7 +161,10 @@ export default function App() {
               {currentView === 'account' ? 'Minha Conta' : navItems.find(i => i.id === currentView)?.label}
             </h2>
           </div>
-          <Timer />
+          <div className="flex items-center gap-4">
+            <NotificationCenter />
+            <Timer />
+          </div>
         </header>
 
         {/* View Area */}

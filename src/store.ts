@@ -101,6 +101,19 @@ export interface UserProfile {
   avatar: string | null;
 }
 
+export type NotificationType = 'follow' | 'flashcard' | 'calendar' | 'system';
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  date: string;
+  read: boolean;
+  link?: string;
+  fromUid?: string;
+}
+
 interface AppState {
   subjects: Subject[];
   topics: Topic[];
@@ -122,6 +135,8 @@ interface AppState {
   customRankingEndDate: string | null;
   sharedQuestions: SharedQuestion[];
   isAuthenticated: boolean;
+  lastUpdate: string | null;
+  notifications: AppNotification[];
 
   // Actions
   login: () => void;
@@ -150,6 +165,10 @@ interface AppState {
   toggleWeeklyRankingFriend: (uid: string) => void;
   setCustomRankingDates: (start: string | null, end: string | null) => void;
   setSharedQuestions: (questions: SharedQuestion[]) => void;
+  addNotification: (notification: Omit<AppNotification, 'id' | 'date' | 'read'>) => void;
+  markNotificationAsRead: (id: string) => void;
+  deleteNotification: (id: string) => void;
+  setNotifications: (notifications: AppNotification[]) => void;
   resetAllData: () => void;
 }
 
@@ -214,6 +233,8 @@ export const useStore = create<AppState>()(
       autoGenerateSubjectId: null,
       autoGenerateCount: 3,
       isAuthenticated: false,
+      lastUpdate: null,
+      notifications: [],
 
       login: () => set({ isAuthenticated: true }),
       logout: () => set({ isAuthenticated: false }),
@@ -440,6 +461,28 @@ export const useStore = create<AppState>()(
       }),
       
       setSharedQuestions: (questions) => set({ sharedQuestions: questions }),
+      
+      addNotification: (notification) => set((state) => ({
+        notifications: [
+          { 
+            ...notification, 
+            id: generateId(), 
+            date: new Date().toISOString(), 
+            read: false 
+          }, 
+          ...state.notifications
+        ].slice(0, 50)
+      })),
+
+      markNotificationAsRead: (id) => set((state) => ({
+        notifications: state.notifications.map(n => n.id === id ? { ...n, read: true } : n)
+      })),
+
+      deleteNotification: (id) => set((state) => ({
+        notifications: state.notifications.filter(n => n.id !== id)
+      })),
+
+      setNotifications: (notifications) => set({ notifications }),
 
       resetAllData: () => set({
         subjects: [],
@@ -448,6 +491,7 @@ export const useStore = create<AppState>()(
         flashcards: [],
         simulados: [],
         studySessions: [],
+        notifications: [],
         editalInfo: {
           carreira: '',
           cargo: '',

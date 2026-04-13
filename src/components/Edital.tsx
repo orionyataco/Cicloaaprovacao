@@ -107,11 +107,11 @@ REGRAS DE VERTICALIZAÇÃO:
           } catch (err: any) {
              console.error('Primeira tentativa falhou:', err);
              // Tenta o modelo Pro como fallback em caso de qualquer erro, inclusive 404 ou 429
-             console.log('Tentando modelo alternativo (gemini-1.5-pro)...');
+             console.log('Tentando modelo alternativo (gemini-2.0-flash)...');
              try {
                const fallbackModel = genAI.getGenerativeModel({ 
                  model: "gemini-2.5-flash-lite"
-               }, { apiVersion: 'v1' });
+               });
                const result = await fallbackModel.generateContent([
                  { inlineData: { data: base64String, mimeType: file.type } },
                  { text: prompt }

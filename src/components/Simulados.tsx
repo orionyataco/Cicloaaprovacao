@@ -117,16 +117,16 @@ export function Simulados() {
       console.log('Usando Chave API (final):', apiKey.substring(0, 10) + '...');
       const genAI = new GoogleGenerativeAI(apiKey);
       
-      // Usando a versão Lite do 2.5 para evitar sobrecarga (erro 503) no servidor
+      // Usando gemini-1.5-flash que é rápido, estável e gratuito no plano free tier
       const modelId = "gemini-2.5-flash-lite"; 
-      console.log('Tentando versão Lite (mais estável):', modelId);
+      console.log('Utilizando modelo estável para geração:', modelId);
 
       const model = genAI.getGenerativeModel({ 
         model: modelId
       }, { apiVersion: 'v1' });
       
       const isCespe = editalInfo.banca.toLowerCase().includes('cespe') || editalInfo.banca.toLowerCase().includes('cebraspe');
-      const promptType = isCespe ? 'Certo/Errado (2 alternativas)' : 'múltipla escolha (5 alternativas)';
+      const promptType = isCespe ? 'Certo/Errado (apenas 2 alternativas)' : 'múltipla escolha (5 alternativas)';
 
       let subjectsWithTopics;
       if (targetTopicId) {
@@ -150,19 +150,30 @@ export function Simulados() {
       const category = subjectsWithTopics.length > 1 ? 'simulado' : 'questoes';
       setActiveExamCategory(category);
 
-      const prompt = `Gere um simulado de ${promptType} focado em concursos públicos para a banca ${editalInfo.banca || 'padrão'}.
-Distribuição solicitada de questões:
+      const prompt = `Você é um professor especialista em concursos públicos brasileiros, com vasta experiência em bancas como Cebraspe/Cespe, FGV e FCC.
+Sua tarefa é gerar questões inéditas e de alto nível técnico no formato ${promptType} para a banca examinadora: ${editalInfo.banca || 'Padrão Profissional (FGV/FCC/Cespe)'}.
+
+REGRAS CRÍTICAS:
+1. LEGISLAÇÃO: Para disciplinas de Direito, utilize a Constituição Federal, Leis Secas e Códigos vigentes. Nunca invente leis.
+2. JURISPRUDÊNCIA: Se aplicável, utilize entendimentos pacificados do STF e STJ.
+3. ESTILO DA BANCA: 
+   - Se for Cespe: Foque em afirmações categóricas que exijam julgamento.
+   - Se for FGV: Utilize casos práticos e situações-problema.
+   - Se for FCC: Foque na literalidade da lei e doutrina clássica.
+4. RIGOR: Evite questões óbvias. Foque em pegadinhas comuns de concurso, exceções à regra e detalhes técnicos.
+
+DISTRIBUIÇÃO SOLICITADA:
 ${JSON.stringify(subjectsWithTopics, null, 2)}
 
-RETORNE APENAS O ARRAY JSON, SEM TEXTO ADICIONAL, NO FORMATO:
+RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA DO JSON) NO FORMATO:
 [
   {
     "subject": "Nome da disciplina",
-    "topic": "Tópico abordado",
-    "text": "Enunciado da questão",
+    "topic": "Tópico específico (ex: Art. 5º da CF)",
+    "text": "Enunciado completo da questão",
     "options": ["Opção A", "Opção B", ...],
     "correctIndex": 0,
-    "explanation": "Explicação detalhada"
+    "explanation": "Explicação técnica citando lei ou doutrina"
   }
 ]`;
 
