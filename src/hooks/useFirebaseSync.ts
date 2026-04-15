@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useStore } from '../store';
@@ -9,7 +9,7 @@ import { startOfWeek, format, parseISO } from 'date-fns';
 export function useFirebaseSync() {
   const store = useStore();
   const isHydrating = useRef(false);
-  const hasHydrated = useRef(false);
+  const [hasHydrated, setHasHydrated] = useState(false);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ref para unsubscriver listeners
@@ -22,10 +22,10 @@ export function useFirebaseSync() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        if (isHydrating.current || hasHydrated.current) return;
+        if (isHydrating.current || hasHydrated) return;
         
         isHydrating.current = true;
-        hasHydrated.current = false;
+        setHasHydrated(false);
 
         try {
           const docRef = doc(db, 'users', user.uid);
@@ -98,10 +98,10 @@ export function useFirebaseSync() {
               });
             });
           } else {
-            // Usuário novo — Garante que o estado local esteja limpo antes de logar
-            useStore.getState().resetAllData();
+            // Usuário novo — Não resetamos mais os dados para permitir que o que ele fez offline 
+            // seja sincronizado agora que ele logou.
             useStore.getState().login();
-            console.log('[Firebase] Novo usuário, estado resetado e logado.');
+            console.log('[Firebase] Novo usuário logado, aguardando sincronização do estado local.');
           }
         } catch (error) {
           console.error('[Firebase] Erro ao carregar dados:', error);
@@ -110,13 +110,13 @@ export function useFirebaseSync() {
           // Aguarda um pouco antes de liberar o sync para evitar loop
           setTimeout(() => {
             isHydrating.current = false;
-            hasHydrated.current = true;
+            setHasHydrated(true);
           }, 300);
         }
       } else {
         // Usuário deslogou
         isHydrating.current = false;
-        hasHydrated.current = false;
+        setHasHydrated(false);
         useStore.getState().logout();
         useStore.getState().resetAllData();
         if (sharedQuestionsUnsubscribe.current) {
@@ -145,7 +145,7 @@ export function useFirebaseSync() {
     // 2. A hidratação inicial já ocorreu (evita sobrescrever o banco com dados vazios ao iniciar)
     // 3. O usuário está autenticado no Firebase
     const user = auth.currentUser;
-    if (isHydrating.current || !hasHydrated.current || !store.isAuthenticated || !user) {
+    if (isHydrating.current || !hasHydrated || !store.isAuthenticated || !user) {
       return;
     }
 
@@ -290,6 +290,7 @@ export function useFirebaseSync() {
     store.customRankingStartDate,
     store.customRankingEndDate,
     store.notifications,
-    store.isAuthenticated
+    store.isAuthenticated,
+    hasHydrated
   ]);
 }
