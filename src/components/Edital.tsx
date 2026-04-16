@@ -1,13 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { useStore, TopicStatus, EditalInfo } from '@/store';
-import { Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, FileText, RefreshCw, Upload, Loader2, Trash2, AlertTriangle, Edit2, Save, X, Info, ExternalLink, CalendarDays, CalendarClock, Brain } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, FileText, RefreshCw, Upload, Loader2, Trash2, AlertTriangle, Edit2, Save, X, Info, ExternalLink, CalendarDays, CalendarClock, Brain, Youtube, Link as LinkIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Ciclo } from './Ciclo';
 import { Cronograma } from './Cronograma';
 
 export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) {
-  const { subjects, topics, addSubject, addTopic, updateTopicStatus, importEdital, deleteSubject, deleteAllSubjects, editalInfo, updateEditalInfo, setActiveTopicId, activeTopicId, setAutoGenerateTopicId, setAutoGenerateSubjectId } = useStore();
+  const { subjects, topics, addSubject, addTopic, updateTopicStatus, importEdital, deleteSubject, deleteAllSubjects, editalInfo, updateEditalInfo, setActiveTopicId, activeTopicId, setAutoGenerateTopicId, setAutoGenerateSubjectId, updateTopicLinks } = useStore();
   const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
   const [genCounts, setGenCounts] = useState<Record<string, number>>({});
   const [isBulkAddModalOpen, setIsBulkAddModalOpen] = useState(false);
@@ -492,66 +492,109 @@ REGRAS DE VERTICALIZAÇÃO:
                 <div className="border-t border-zinc-800 p-4 bg-zinc-900/50 space-y-2">
                   {subjectTopics.map(topic => (
                     <div key={topic.id} className={cn(
-                      "flex items-center justify-between p-3 rounded-lg border transition-all group",
+                      "flex flex-col p-3 rounded-lg border transition-all group",
                       activeTopicId === topic.id 
                         ? "bg-emerald-500/10 border-emerald-500/30" 
                         : "bg-zinc-800/30 border-zinc-800/50 hover:border-zinc-700"
                     )}>
-                      <button 
-                        onClick={() => setActiveTopicId(topic.id)}
-                        className="flex-1 text-left"
-                      >
-                        <span className={cn(
-                          "text-sm transition-colors",
-                          activeTopicId === topic.id ? "text-emerald-400 font-bold" : "text-zinc-300 group-hover:text-zinc-100"
-                        )}>
-                          {topic.name}
-                        </span>
-                      </button>
-                      
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-700/50 rounded-lg p-0.5">
-                          <input 
-                            type="number" 
-                            min="1" 
-                            max="10" 
-                            value={genCounts[topic.id] || 3}
-                            onChange={(e) => {
-                              setGenCounts(prev => ({ ...prev, [topic.id]: parseInt(e.target.value) || 1 }));
-                            }}
-                            className="w-8 bg-transparent text-center text-[10px] font-bold text-zinc-300 focus:outline-none"
-                          />
-                          <button
-                            onClick={() => {
-                              setAutoGenerateTopicId(topic.id, genCounts[topic.id] || 3);
-                              onViewChange('simulados');
-                            }}
-                            className="p-1 hover:bg-emerald-500/10 text-emerald-500/60 hover:text-emerald-400 rounded transition-all"
-                            title="Gerar questões deste assunto"
-                          >
-                            <Brain className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
-                        <select
-                          value={topic.status}
-                          onChange={(e) => updateTopicStatus(topic.id, e.target.value as TopicStatus)}
-                          className={cn(
-                            "text-xs px-2 py-1 rounded-md border appearance-none cursor-pointer focus:outline-none focus:ring-1",
-                            topic.status === 'NOT_READ' && "bg-zinc-800 border-zinc-700 text-zinc-400 focus:ring-zinc-500",
-                            topic.status === 'THEORY_DONE' && "bg-blue-500/10 border-blue-500/20 text-blue-400 focus:ring-blue-500",
-                            topic.status === 'SUMMARY_DONE' && "bg-amber-500/10 border-amber-500/20 text-amber-400 focus:ring-amber-500",
-                            topic.status === 'REVIEWED' && "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 focus:ring-emerald-500"
-                          )}
+                      <div className="flex items-center justify-between">
+                        <button 
+                          onClick={() => setActiveTopicId(topic.id)}
+                          className="flex-1 text-left"
                         >
-                          {Object.entries(statusLabels).map(([val, label]) => (
-                            <option key={val} value={val} className="bg-zinc-900 text-zinc-300">{label}</option>
-                          ))}
-                        </select>
-                        <div className="w-6 h-6 flex items-center justify-center">
-                          {statusIcons[topic.status]}
+                          <span className={cn(
+                            "text-sm transition-colors flex items-center gap-2",
+                            activeTopicId === topic.id ? "text-emerald-400 font-bold" : "text-zinc-300 group-hover:text-zinc-100"
+                          )}>
+                            {topic.name}
+                            {(topic.youtubeLink || topic.driveLink) && (
+                                <span className="flex gap-1 ml-2">
+                                  {topic.youtubeLink && <Youtube className="w-3.5 h-3.5 text-red-500/70" />}
+                                  {topic.driveLink && <LinkIcon className="w-3.5 h-3.5 text-blue-500/70" />}
+                                </span>
+                            )}
+                          </span>
+                        </button>
+                        
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-700/50 rounded-lg p-0.5">
+                            <input 
+                              type="number" 
+                              min="1" 
+                              max="10" 
+                              value={genCounts[topic.id] || 3}
+                              onChange={(e) => {
+                                setGenCounts(prev => ({ ...prev, [topic.id]: parseInt(e.target.value) || 1 }));
+                              }}
+                              className="w-8 bg-transparent text-center text-[10px] font-bold text-zinc-300 focus:outline-none"
+                            />
+                            <button
+                              onClick={() => {
+                                setAutoGenerateTopicId(topic.id, genCounts[topic.id] || 3);
+                                onViewChange('simulados');
+                              }}
+                              className="p-1 hover:bg-emerald-500/10 text-emerald-500/60 hover:text-emerald-400 rounded transition-all"
+                              title="Gerar questões deste assunto"
+                            >
+                              <Brain className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <select
+                            value={topic.status}
+                            onChange={(e) => updateTopicStatus(topic.id, e.target.value as TopicStatus)}
+                            className={cn(
+                              "text-xs px-2 py-1 rounded-md border appearance-none cursor-pointer focus:outline-none focus:ring-1",
+                              topic.status === 'NOT_READ' && "bg-zinc-800 border-zinc-700 text-zinc-400 focus:ring-zinc-500",
+                              topic.status === 'THEORY_DONE' && "bg-blue-500/10 border-blue-500/20 text-blue-400 focus:ring-blue-500",
+                              topic.status === 'SUMMARY_DONE' && "bg-amber-500/10 border-amber-500/20 text-amber-400 focus:ring-amber-500",
+                              topic.status === 'REVIEWED' && "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 focus:ring-emerald-500"
+                            )}
+                          >
+                            {Object.entries(statusLabels).map(([val, label]) => (
+                              <option key={val} value={val} className="bg-zinc-900 text-zinc-300">{label}</option>
+                            ))}
+                          </select>
+                          <div className="w-6 h-6 flex items-center justify-center">
+                            {statusIcons[topic.status]}
+                          </div>
                         </div>
                       </div>
+
+                      {activeTopicId === topic.id && (
+                        <div className="mt-3 pt-3 border-t border-emerald-500/20 flex flex-col sm:flex-row gap-3">
+                          <div className="flex-1 flex items-center gap-2 bg-zinc-900/80 border border-zinc-700/80 rounded-lg px-3 py-1.5 focus-within:ring-1 focus-within:ring-red-500/50">
+                             <Youtube className="w-4 h-4 text-red-500 shrink-0" />
+                             <input 
+                               type="text" 
+                               placeholder="Link do YouTube..." 
+                               value={topic.youtubeLink || ''} 
+                               onChange={(e) => updateTopicLinks(topic.id, { youtubeLink: e.target.value })}
+                               className="bg-transparent text-xs text-zinc-200 focus:outline-none w-full"
+                             />
+                             {topic.youtubeLink && (
+                               <a href={topic.youtubeLink} target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-red-400 flex-shrink-0">
+                                 <ExternalLink className="w-3.5 h-3.5" />
+                               </a>
+                             )}
+                          </div>
+                          <div className="flex-1 flex items-center gap-2 bg-zinc-900/80 border border-zinc-700/80 rounded-lg px-3 py-1.5 focus-within:ring-1 focus-within:ring-blue-500/50">
+                             <LinkIcon className="w-4 h-4 text-blue-500 shrink-0" />
+                             <input 
+                               type="text" 
+                               placeholder="Link do Drive/Material..." 
+                               value={topic.driveLink || ''} 
+                               onChange={(e) => updateTopicLinks(topic.id, { driveLink: e.target.value })}
+                               className="bg-transparent text-xs text-zinc-200 focus:outline-none w-full"
+                             />
+                             {topic.driveLink && (
+                               <a href={topic.driveLink} target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-blue-400 flex-shrink-0">
+                                 <ExternalLink className="w-3.5 h-3.5" />
+                               </a>
+                             )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
 
