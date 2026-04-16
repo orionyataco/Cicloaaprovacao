@@ -29,6 +29,10 @@ export function Signup({ onSignup, onBackToLogin }: SignupProps) {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(userCredential.user, { displayName: name });
+      
+      // Atualiza o store local com o nome recém criado para que a primeira sincronização use o nome correto
+      useStore.getState().updateUserProfile({ name: name });
+      
       onSignup();
     } catch (err: any) {
       console.error(err);
@@ -184,7 +188,7 @@ export function Signup({ onSignup, onBackToLogin }: SignupProps) {
         </div>
 
         <p className="text-center mt-8 text-zinc-600 text-[10px] uppercase tracking-[0.2em]">
-          Ciclo à Aprovação &copy; {new Date().getFullYear()}
+          Ciclo a Aprovação &copy; {new Date().getFullYear()}
         </p>
       </div>
     </div>

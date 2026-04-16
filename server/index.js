@@ -12,7 +12,7 @@ app.use(express.json());
 
 // Exemplo de rota de API
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Servidor Backend do Ciclo à Aprovação rodando!' });
+  res.json({ status: 'ok', message: 'Servidor Backend do Ciclo a Aprovação rodando!' });
 });
 
 app.listen(PORT, '0.0.0.0', () => {

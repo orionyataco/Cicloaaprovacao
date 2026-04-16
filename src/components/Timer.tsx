@@ -4,38 +4,52 @@ import { cn } from '@/lib/utils';
 import { useStore } from '@/store';
 
 export function Timer() {
-  const [isActive, setIsActive] = useState(false);
+  const { 
+    topics, 
+    logStudySession, 
+    activeTopicId, 
+    setActiveTopicId,
+    timerStartTime,
+    timerActiveTopicId,
+    startTimer,
+    stopTimer
+  } = useStore();
+
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const startTimeRef = useRef<number | null>(null);
-  const accumulatedRef = useRef(0);
-  const { topics, logStudySession, activeTopicId, setActiveTopicId } = useStore();
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (isActive) {
-      startTimeRef.current = Date.now();
-      interval = setInterval(() => {
+    if (timerStartTime) {
+      // Se já estava rodando (ex: refresh), sincroniza o tempo imediatamente
+      const updateTime = () => {
+        const start = new Date(timerStartTime).getTime();
         const now = Date.now();
-        const currentElapsed = Math.floor((now - startTimeRef.current!) / 1000);
-        setElapsedSeconds(accumulatedRef.current + currentElapsed);
-      }, 100); // Atualiza a cada 100ms para display preciso
+        setElapsedSeconds(Math.floor((now - start) / 1000));
+      };
+      
+      updateTime();
+      intervalRef.current = setInterval(updateTime, 1000);
+    } else {
+      setElapsedSeconds(0);
+      if (intervalRef.current) clearInterval(intervalRef.current);
     }
-    return () => clearInterval(interval);
-  }, [isActive]);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [timerStartTime]);
 
   const toggleTimer = () => {
-    if (isActive) {
+    if (timerStartTime) {
       // Ao parar, salva o log e reseta
-      if (activeTopicId) {
-        logStudySession(activeTopicId, elapsedSeconds);
+      const currentTopicId = timerActiveTopicId || activeTopicId;
+      if (currentTopicId) {
+        logStudySession(currentTopicId, elapsedSeconds);
       }
-      setElapsedSeconds(0);
-      accumulatedRef.current = 0;
-      startTimeRef.current = null;
+      stopTimer();
     } else {
-      startTimeRef.current = Date.now();
+      startTimer(activeTopicId);
     }
-    setIsActive(!isActive);
   };
 
   const formatTime = (totalSeconds: number) => {
@@ -45,7 +59,8 @@ export function Timer() {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const activeTopic = topics.find(t => t.id === activeTopicId);
+  const activeTopic = topics.find(t => t.id === (timerActiveTopicId || activeTopicId));
+  const isActive = !!timerStartTime;
 
   return (
     <div className="flex items-center gap-2 sm:gap-4 bg-zinc-900 border border-zinc-800 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 shadow-lg">

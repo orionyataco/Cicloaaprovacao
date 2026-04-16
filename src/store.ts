@@ -134,11 +134,14 @@ interface AppState {
   customRankingStartDate: string | null;
   customRankingEndDate: string | null;
   sharedQuestions: SharedQuestion[];
+  timerStartTime: string | null;
+  timerActiveTopicId: string | null;
   isAuthenticated: boolean;
   lastUpdate: string | null;
   notifications: AppNotification[];
 
   // Actions
+  setUid: (uid: string | null) => void;
   login: () => void;
   logout: () => void;
   addSubject: (subject: Omit<Subject, 'id'>) => void;
@@ -170,6 +173,8 @@ interface AppState {
   deleteNotification: (id: string) => void;
   setNotifications: (notifications: AppNotification[]) => void;
   resetAllData: () => void;
+  startTimer: (topicId: string | null) => void;
+  stopTimer: () => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -232,12 +237,16 @@ export const useStore = create<AppState>()(
       autoGenerateTopicId: null,
       autoGenerateSubjectId: null,
       autoGenerateCount: 3,
+      uid: null,
+      timerStartTime: null,
+      timerActiveTopicId: null,
       isAuthenticated: false,
       lastUpdate: null,
       notifications: [],
 
+      setUid: (uid) => set({ uid }),
       login: () => set({ isAuthenticated: true }),
-      logout: () => set({ isAuthenticated: false }),
+      logout: () => set({ isAuthenticated: false, uid: null }),
 
       addSubject: (subject) => set((state) => ({ subjects: [...state.subjects, { ...subject, id: generateId() }] })),
       
@@ -281,8 +290,8 @@ export const useStore = create<AppState>()(
             return t;
           }),
           // Avança para a próxima matéria no ciclo
-          currentCycleIndex: shouldAdvanceCycle
-            ? (state.currentCycleIndex + 1) % (state.subjects.length || 1)
+          currentCycleIndex: shouldAdvanceCycle && state.subjects.length > 0
+            ? (state.currentCycleIndex + 1) % state.subjects.length
             : state.currentCycleIndex,
         };
       }),
@@ -380,22 +389,27 @@ export const useStore = create<AppState>()(
       })),
 
       importEdital: (data) => set((state) => {
+        if (!Array.isArray(data)) return state;
+
         const newSubjects = [...state.subjects];
         const newTopics = [...state.topics];
 
         data.forEach(item => {
+          if (!item.subject || !Array.isArray(item.topics)) return;
+
           const subjectId = generateId();
           newSubjects.push({
             id: subjectId,
-            name: item.subject,
+            name: String(item.subject),
             color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
           });
 
           item.topics.forEach(topicName => {
+            if (!topicName) return;
             newTopics.push({
               id: generateId(),
               subjectId,
-              name: topicName,
+              name: String(topicName),
               status: 'NOT_READ',
               lastStudiedAt: null,
               nextReviewAt: null,
@@ -423,7 +437,8 @@ export const useStore = create<AppState>()(
         topics: [],
         questionLogs: [],
         flashcards: [],
-        studySessions: []
+        studySessions: [],
+        currentCycleIndex: 0
       }),
 
       updateEditalInfo: (info) => set((state) => ({
@@ -517,6 +532,20 @@ export const useStore = create<AppState>()(
         autoGenerateTopicId: null,
         autoGenerateSubjectId: null,
         autoGenerateCount: 0,
+        lastUpdate: null,
+        uid: null,
+        timerStartTime: null,
+        timerActiveTopicId: null,
+      }),
+
+      startTimer: (topicId) => set({ 
+        timerStartTime: new Date().toISOString(), 
+        timerActiveTopicId: topicId 
+      }),
+
+      stopTimer: () => set({ 
+        timerStartTime: null, 
+        timerActiveTopicId: null 
       }),
     }),
     {

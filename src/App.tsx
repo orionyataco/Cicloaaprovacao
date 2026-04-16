@@ -73,7 +73,7 @@ export default function App() {
         <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-tight bg-gradient-to-br from-emerald-400 to-blue-500 bg-clip-text text-transparent">
-              Ciclo à Aprovação
+              Ciclo a Aprovação
             </h1>
             <p className="text-xs text-zinc-500 mt-1 uppercase tracking-widest font-semibold">Alta Performance</p>
           </div>

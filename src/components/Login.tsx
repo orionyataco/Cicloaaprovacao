@@ -58,7 +58,7 @@ export function Login({ onLogin, onGotoSignup }: LoginProps) {
           </div>
           
           <h1 className="text-3xl font-bold tracking-tighter text-white">
-            CICLO <span className="bg-gradient-to-r from-emerald-400 to-blue-500 bg-clip-text text-transparent">À APROVAÇÃO</span>
+            CICLO <span className="bg-gradient-to-r from-emerald-400 to-blue-500 bg-clip-text text-transparent">A APROVAÇÃO</span>
           </h1>
           <p className="text-zinc-500 text-sm mt-2 uppercase tracking-[0.2em] font-medium">
             Preparação que te leva lá
@@ -147,7 +147,7 @@ export function Login({ onLogin, onGotoSignup }: LoginProps) {
 
         {/* Footer info */}
         <p className="text-center mt-12 text-zinc-600 text-xs">
-          &copy; {new Date().getFullYear()} Ciclo à Aprovação. Todos os direitos reservados.
+          &copy; {new Date().getFullYear()} Ciclo a Aprovação. Todos os direitos reservados.
         </p>
       </div>
     </div>

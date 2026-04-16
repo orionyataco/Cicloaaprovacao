@@ -38,6 +38,7 @@ export function Rankings() {
     unfollowUser, 
     userProfile, 
     importEdital,
+    updateEditalInfo,
     customRankingStartDate,
     customRankingEndDate,
     setCustomRankingDates
@@ -146,8 +147,15 @@ export function Rankings() {
     }
   };
 
-  const handleImportAction = async (targetUid: string, targetName: string, editalData: any) => {
+  const handleImportAction = async (targetUid: string, targetName: string, editalData: any, editalInfoToCopy?: any) => {
     importEdital(editalData);
+    if (editalInfoToCopy) {
+      updateEditalInfo({
+        carreira: editalInfoToCopy.carreira || '',
+        cargo: editalInfoToCopy.cargo || '',
+        banca: editalInfoToCopy.banca || ''
+      });
+    }
     try {
       await addDoc(collection(db, 'notifications'), {
         toUid: targetUid,
@@ -161,7 +169,7 @@ export function Rankings() {
     } catch (err) {
       console.error('Erro ao enviar notificação de cópia:', err);
     }
-    showToast('Edital importado com sucesso!', 'success');
+    alert('Edital importado com sucesso!');
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -755,7 +763,11 @@ export function Rankings() {
                      <button 
                         onClick={() => {
                           if (confirm(`Deseja importar os ${selectedUser.editalStructure?.length} assuntos e seus respectivos tópicos para o seu Edital? Isso será adicionado à sua lista atual.`)) {
-                            handleImportAction(selectedUser.uid, selectedUser.name, selectedUser.editalStructure!);
+                            let editalInfoToCopy = undefined;
+                            if (confirm('Deseja também copiar as informações deste concurso (cargo, banca, etc) para o seu perfil? Isso substituirá suas informações atuais.')) {
+                              editalInfoToCopy = selectedUser.editalInfo;
+                            }
+                            handleImportAction(selectedUser.uid, selectedUser.name, selectedUser.editalStructure!, editalInfoToCopy);
                           }
                         }}
                         className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20 active:scale-95"
