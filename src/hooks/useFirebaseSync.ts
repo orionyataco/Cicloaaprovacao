@@ -183,19 +183,13 @@ export function useFirebaseSync() {
         const docRef = doc(db, 'users', user.uid);
         const profileRef = doc(db, 'profiles', user.uid);
 
-        // Extrai apenas as funções/ações para salvar apenas o estado no Firestore
-        const {
-          login, logout, addSubject, addTopic, updateTopicStatus,
-          logStudySession, setActiveTopicId, addQuestionLog,
-          addFlashcard, reviewFlashcard, addSimulado, deleteSimulado,
-          importEdital, deleteSubject, deleteAllSubjects,
-          updateEditalInfo, updateScheduleConfig, updateUserProfile,
-          setCurrentCycleIndex, resetAllData, followUser, unfollowUser,
-          setAutoGenerateTopicId, setSharedQuestions, sharedQuestions,
-          toggleWeeklyRankingFriend, setCustomRankingDates,
-          addNotification, markNotificationAsRead, deleteNotification, setNotifications,
-          ...dataToSave
-        } = store;
+        // Extrai apenas o estado (ignora funções) para salvar no Firestore
+        const dataToSave = Object.fromEntries(
+          Object.entries(store).filter(([_, v]) => typeof v !== 'function')
+        ) as Record<string, any>;
+        
+        // Removemos dados que não devem ir no documento base do usuário
+        delete dataToSave.sharedQuestions;
 
         // Validação de segurança: Se o avatar for Base64 muito grande, removemos para evitar erro do Firestore (1MB limit)
         const isBase64Avatar = dataToSave.userProfile?.avatar?.startsWith('data:');
