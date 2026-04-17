@@ -3,6 +3,7 @@ import { Mail, Lock, User, UserPlus, CheckCircle2, BookOpen, GraduationCap, Refr
 import { cn } from '../lib/utils';
 import { auth } from '../lib/firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { useStore } from '../store';
 
 interface SignupProps {
   onSignup: () => void;
@@ -26,12 +27,17 @@ export function Signup({ onSignup, onBackToLogin }: SignupProps) {
     }
     
     setIsLoading(true);
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(userCredential.user, { displayName: name });
-      
-      // Atualiza o store local com o nome recém criado para que a primeira sincronização use o nome correto
-      useStore.getState().updateUserProfile({ name: name });
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const uid = userCredential.user.uid;
+        
+        // Vincula o UID imediatamente para evitar que o useFirebaseSync resete o estado por "troca de usuário"
+        useStore.getState().setUid(uid);
+        
+        await updateProfile(userCredential.user, { displayName: name });
+        
+        // Atualiza o store local com o nome recém criado para que a primeira sincronização use o nome correto
+        useStore.getState().updateUserProfile({ name: name });
       
       onSignup();
     } catch (err: any) {

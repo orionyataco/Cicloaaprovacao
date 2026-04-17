@@ -55,6 +55,20 @@ export default function App() {
     );
   }
 
+  // Se está autenticado, mas os dados ainda não foram carregados do Firebase
+  if (!useStore.getState().isHydrated) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4">
+        <div className="relative w-24 h-24 mb-6">
+          <div className="absolute inset-0 border-4 border-emerald-500/20 rounded-full animate-spin border-t-emerald-500" />
+          <div className="absolute inset-2 border-4 border-blue-500/10 rounded-full animate-spin-slow border-t-blue-500" />
+        </div>
+        <h2 className="text-xl font-bold text-zinc-100 animate-pulse">Sincronizando seus dados...</h2>
+        <p className="text-zinc-500 text-sm mt-2">Isso levará apenas um segundo.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden selection:bg-emerald-500/30">
       {/* Mobile Overlay */}
@@ -136,6 +150,7 @@ export default function App() {
             onClick={async () => {
               await signOut(auth);
               logout();
+              useStore.getState().resetAllData();
             }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-zinc-500 hover:bg-red-500/10 hover:text-red-400 border border-transparent transition-all"
           >
@@ -157,11 +172,11 @@ export default function App() {
               <Menu className="w-6 h-6" />
             </button>
             <div className="hidden sm:block w-2 h-8 bg-emerald-500 rounded-full" />
-            <h2 className="text-lg lg:text-xl font-semibold text-zinc-100 truncate max-w-[150px] sm:max-w-none">
+            <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-zinc-100 truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
               {currentView === 'account' ? 'Minha Conta' : navItems.find(i => i.id === currentView)?.label}
             </h2>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 sm:gap-4">
             <NotificationCenter />
             <Timer />
           </div>

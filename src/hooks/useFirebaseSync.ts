@@ -31,11 +31,16 @@ export function useFirebaseSync() {
           isHydrating.current = false;
           setHasHydrated(false);
         } else if (!currentStoreUid) {
-          // Se não tinha UID, vinculamos o atual
+          // Se não havia UID mas o store tem dados (ex: lixo no localStorage), limpa
+          const isDirty = useStore.getState().subjects.length > 0 || useStore.getState().userProfile.username !== '';
+          if (isDirty) {
+            console.log('[Firebase] 🧹 Store sujo s/ UID detectado. Limpando...');
+            useStore.getState().resetAllData();
+          }
           useStore.getState().setUid(user.uid);
         }
 
-        if (isHydrating.current || hasHydrated) return;
+        if (isHydrating.current || (hasHydrated && useStore.getState().uid === user.uid)) return;
         
         isHydrating.current = true;
         setHasHydrated(false);
@@ -51,8 +56,6 @@ export function useFirebaseSync() {
 
             console.log(`[Firebase] Checando sincronização: Local(${localLastUpdate}) vs Remoto(${remoteLastUpdate})`);
 
-            // Só carrega se o banco estiver mais novo ou se local estiver zerado
-            // Se local for mais novo, chamamos login() e deixamos o useEffect de sync subir os dados
             const shouldOverwrite = !localLastUpdate || 
                                     (remoteLastUpdate && new Date(remoteLastUpdate) > new Date(localLastUpdate));
 
@@ -65,9 +68,16 @@ export function useFirebaseSync() {
                 flashcards: remoteData.flashcards ?? [],
                 simulados: remoteData.simulados ?? [],
                 studySessions: remoteData.studySessions ?? [],
-                editalInfo: remoteData.editalInfo ?? useStore.getState().editalInfo,
-                scheduleConfig: remoteData.scheduleConfig ?? useStore.getState().scheduleConfig,
-                userProfile: remoteData.userProfile ?? useStore.getState().userProfile,
+                editalInfo: remoteData.editalInfo ?? {
+                  carreira: '', cargo: '', banca: '', remuneracao: '', vagas: '',
+                  periodoInscricao: '', valorInscricao: '', siteConcurso: '', dataProva: ''
+                },
+                scheduleConfig: remoteData.scheduleConfig ?? {
+                  activeDays: [1, 2, 3, 4, 5], hoursPerDay: 2
+                },
+                userProfile: remoteData.userProfile ?? {
+                  name: 'Estudante', username: '', bio: '', birthDate: '', gender: '', avatar: null
+                },
                 followingIds: remoteData.followingIds ?? [],
                 weeklyRankingFriendIds: remoteData.weeklyRankingFriendIds ?? [],
                 customRankingStartDate: remoteData.customRankingStartDate ?? null,
@@ -103,6 +113,7 @@ export function useFirebaseSync() {
           setTimeout(() => {
             isHydrating.current = false;
             setHasHydrated(true);
+            useStore.setState({ isHydrated: true });
           }, 300);
         }
       } else {
@@ -123,7 +134,13 @@ export function useFirebaseSync() {
       sharedQuestionsUnsubscribe.current = onSnapshot(q, (snapshot) => {
         const sharedDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
         useStore.getState().setSharedQuestions(sharedDocs);
+      }, (error) => {
+        if (auth.currentUser) {
+          console.error('[Firebase] Erro no listener de questões compartilhadas:', error);
+        }
       });
+
+      if (!uid) return;
 
       const nq = query(collection(db, 'notifications'), where('toUid', '==', uid), limit(20));
       notificationsUnsubscribe.current = onSnapshot(nq, (snapshot) => {
@@ -133,6 +150,7 @@ export function useFirebaseSync() {
             const existing = useStore.getState().notifications.find(n => n.id === notif.id);
             if (!existing) {
               useStore.getState().addNotification({
+                id: notif.id,
                 type: notif.type,
                 title: notif.title,
                 message: notif.message,
@@ -142,6 +160,11 @@ export function useFirebaseSync() {
             }
           }
         });
+      }, (error) => {
+        // Apenas loga se o usuário ainda estiver autenticado (evita erros falsos no logout)
+        if (auth.currentUser) {
+          console.warn('[Firebase] Permissão insuficiente ou erro no listener de notificações. Verifique as Regras de Segurança no Console do Firebase.', error.message);
+        }
       });
     };
 
@@ -184,12 +207,26 @@ export function useFirebaseSync() {
         const profileRef = doc(db, 'profiles', user.uid);
 
         // Extrai apenas o estado (ignora funções) para salvar no Firestore
-        const dataToSave = Object.fromEntries(
+        const rawData = Object.fromEntries(
           Object.entries(store).filter(([_, v]) => typeof v !== 'function')
         ) as Record<string, any>;
         
         // Removemos dados que não devem ir no documento base do usuário
-        delete dataToSave.sharedQuestions;
+        delete rawData.sharedQuestions;
+
+        // Função recursiva para converter undefined -> null (Firestore não aceita undefined)
+        const sanitize = (obj: any): any => {
+          if (Array.isArray(obj)) {
+            return obj.map(sanitize);
+          } else if (obj !== null && typeof obj === 'object') {
+            return Object.fromEntries(
+              Object.entries(obj).map(([k, v]) => [k, sanitize(v)])
+            );
+          }
+          return obj === undefined ? null : obj;
+        };
+
+        const dataToSave = sanitize(rawData);
 
         // Validação de segurança: Se o avatar for Base64 muito grande, removemos para evitar erro do Firestore (1MB limit)
         const isBase64Avatar = dataToSave.userProfile?.avatar?.startsWith('data:');

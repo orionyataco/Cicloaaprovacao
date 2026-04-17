@@ -5,11 +5,48 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
+import { db } from '../lib/firebase';
+import { doc, updateDoc, deleteDoc as deleteCloudDoc, writeBatch, collection } from 'firebase/firestore';
+
 export function NotificationCenter() {
-  const { notifications, markNotificationAsRead, deleteNotification } = useStore();
+  const { notifications, markNotificationAsRead, deleteNotification, deleteAllNotifications } = useStore();
   const [isOpen, setIsOpen] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  const handleMarkAsRead = async (id: string) => {
+    markNotificationAsRead(id);
+    try {
+      await updateDoc(doc(db, 'notifications', id), { read: true });
+    } catch (err) {
+      console.error('Erro ao marcar notificação como lida no cloud:', err);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    deleteNotification(id);
+    try {
+      await deleteCloudDoc(doc(db, 'notifications', id));
+    } catch (err) {
+      console.error('Erro ao excluir notificação no cloud:', err);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    const idsToDelete = notifications.map(n => n.id);
+    if (idsToDelete.length === 0) return;
+    
+    deleteAllNotifications();
+    try {
+      const batch = writeBatch(db);
+      idsToDelete.forEach(id => {
+        batch.delete(doc(db, 'notifications', id));
+      });
+      await batch.commit();
+    } catch (err) {
+      console.error('Erro ao apagar todas as notificações no cloud:', err);
+    }
+  };
 
   const typeIcons: Record<NotificationType, React.ReactNode> = {
     follow: <UserPlus className="w-4 h-4 text-blue-400" />,
@@ -44,10 +81,19 @@ export function NotificationCenter() {
           />
           <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
-              <h3 className="font-bold text-zinc-100 flex items-center gap-2">
-                Notificações
-                {unreadCount > 0 && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full">recente</span>}
-              </h3>
+              <div className="flex items-center gap-4">
+                <h3 className="font-bold text-zinc-100 flex items-center gap-2">
+                  Notificações
+                </h3>
+                {notifications.length > 0 && (
+                  <button 
+                    onClick={handleDeleteAll}
+                    className="text-[10px] font-bold text-red-400/70 hover:text-red-400 transition-colors uppercase tracking-wider"
+                  >
+                    Apagar Tudo
+                  </button>
+                )}
+              </div>
               <button 
                 onClick={() => setIsOpen(false)}
                 className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-500"
@@ -95,14 +141,14 @@ export function NotificationCenter() {
                       <div className="flex items-center gap-3 mt-3">
                         {!notification.read && (
                           <button 
-                            onClick={() => markNotificationAsRead(notification.id)}
+                            onClick={() => handleMarkAsRead(notification.id)}
                             className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors"
                           >
                             <Check className="w-3 h-3" /> MARCAR COMO LIDA
                           </button>
                         )}
                         <button 
-                          onClick={() => deleteNotification(notification.id)}
+                          onClick={() => handleDelete(notification.id)}
                           className="text-[10px] font-bold text-zinc-600 hover:text-red-400 flex items-center gap-1 transition-colors"
                         >
                           <Trash2 className="w-3 h-3" /> EXCLUIR

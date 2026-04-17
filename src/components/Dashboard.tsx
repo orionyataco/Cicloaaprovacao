@@ -82,7 +82,7 @@ export function Dashboard() {
       </header>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 flex items-center gap-4">
           <div className="p-2 sm:p-3 bg-blue-500/10 rounded-xl">
             <Target className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />

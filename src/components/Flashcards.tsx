@@ -157,17 +157,17 @@ export function Flashcards() {
               </div>
 
               {showBack && (
-                <div className="grid grid-cols-4 gap-4 mt-8 animate-in fade-in slide-in-from-bottom-4">
-                  <button onClick={() => handleReview(1)} className="bg-zinc-900 hover:bg-red-500/20 text-red-500 border border-zinc-800 hover:border-red-500/50 py-3 rounded-xl font-medium transition-colors">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-8 animate-in fade-in slide-in-from-bottom-4">
+                  <button onClick={() => handleReview(1)} className="bg-zinc-900 hover:bg-red-500/20 text-red-500 border border-zinc-800 hover:border-red-500/50 py-3 rounded-xl font-medium transition-colors text-sm">
                     Errei (1)
                   </button>
-                  <button onClick={() => handleReview(3)} className="bg-zinc-900 hover:bg-amber-500/20 text-amber-500 border border-zinc-800 hover:border-amber-500/50 py-3 rounded-xl font-medium transition-colors">
+                  <button onClick={() => handleReview(3)} className="bg-zinc-900 hover:bg-amber-500/20 text-amber-500 border border-zinc-800 hover:border-amber-500/50 py-3 rounded-xl font-medium transition-colors text-sm">
                     Difícil (3)
                   </button>
-                  <button onClick={() => handleReview(4)} className="bg-zinc-900 hover:bg-blue-500/20 text-blue-400 border border-zinc-800 hover:border-blue-500/50 py-3 rounded-xl font-medium transition-colors">
+                  <button onClick={() => handleReview(4)} className="bg-zinc-900 hover:bg-blue-500/20 text-blue-400 border border-zinc-800 hover:border-blue-500/50 py-3 rounded-xl font-medium transition-colors text-sm">
                     Bom (4)
                   </button>
-                  <button onClick={() => handleReview(5)} className="bg-zinc-900 hover:bg-emerald-500/20 text-emerald-500 border border-zinc-800 hover:border-emerald-500/50 py-3 rounded-xl font-medium transition-colors">
+                  <button onClick={() => handleReview(5)} className="bg-zinc-900 hover:bg-emerald-500/20 text-emerald-500 border border-zinc-800 hover:border-emerald-500/50 py-3 rounded-xl font-medium transition-colors text-sm">
                     Fácil (5)
                   </button>
                 </div>

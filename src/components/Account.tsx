@@ -144,6 +144,38 @@ export function Account() {
     updateUserProfile({ ...formData, avatar: null });
   };
 
+  const handleDeleteAccount = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const confirmMessage = "⚠️ ATENÇÃO: Esta ação é IRREVERSÍVEL. Sua conta e todos os seus dados serão apagados permanentemente do nosso sistema. Deseja continuar?";
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      // 1. Apagar documentos do Firestore
+      await deleteDoc(doc(db, 'users', user.uid));
+      await deleteDoc(doc(db, 'profiles', user.uid));
+      
+      // 2. Apagar avatar se existir
+      await deleteOldAvatar();
+
+      // 3. Apagar usuário do Firebase Auth
+      await user.delete();
+      
+      // 4. Resetar local
+      resetAllData();
+      alert('Sua conta foi excluída com sucesso.');
+      window.location.reload();
+    } catch (err: any) {
+      console.error('Erro ao excluir conta:', err);
+      if (err.code === 'auth/requires-recent-login') {
+        alert('Por segurança, esta operação exige um login recente. Por favor, saia e entre novamente antes de excluir sua conta.');
+      } else {
+        alert('Erro ao excluir conta. Verifique sua conexão ou tente novamente mais tarde.');
+      }
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto pb-12">
       <header>
@@ -311,13 +343,22 @@ export function Account() {
             <p className="text-sm text-zinc-400">
               Ao resetar o sistema, todos os seus editais, ciclos, questões e flashcards serão apagados permanentemente.
             </p>
-            <button
-              onClick={() => setShowResetConfirm(true)}
-              className="w-full flex items-center justify-center gap-2 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/20 px-4 py-3 rounded-xl font-semibold transition-all active:scale-95"
-            >
-              <Trash2 className="w-4 h-4" />
-              Resetar Todo o Sistema
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={() => setShowResetConfirm(true)}
+                className="w-full flex items-center justify-center gap-2 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/20 px-4 py-3 rounded-xl font-semibold transition-all active:scale-95"
+              >
+                <Trash2 className="w-4 h-4" />
+                Resetar Dados de Estudo
+              </button>
+              
+              <button
+                onClick={handleDeleteAccount}
+                className="w-full flex items-center justify-center gap-2 text-zinc-500 hover:text-red-500 text-xs font-bold uppercase tracking-widest pt-2 hover:underline transition-all"
+              >
+                Excluir Minha Conta Permanentemente
+              </button>
+            </div>
           </div>
         </div>
       </div>

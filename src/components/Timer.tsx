@@ -63,13 +63,13 @@ export function Timer() {
   const isActive = !!timerStartTime;
 
   return (
-    <div className="flex items-center gap-2 sm:gap-4 bg-zinc-900 border border-zinc-800 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 shadow-lg">
-      <Clock className="w-4 h-4 sm:w-5 h-5 text-zinc-400 hidden xs:block" />
-      <div className="font-mono text-base sm:text-xl font-medium text-zinc-100 tracking-wider w-20 sm:w-24 text-center">
+    <div className="flex items-center gap-1.5 sm:gap-4 bg-zinc-900 border border-zinc-800 rounded-full px-2.5 sm:px-4 py-1.5 sm:py-2 shadow-lg">
+      <Clock className="w-4 h-4 sm:w-5 h-5 text-zinc-400" />
+      <div className="font-mono text-base sm:text-xl font-medium text-zinc-100 tracking-wider w-[72px] sm:w-24 text-center">
         {formatTime(elapsedSeconds)}
       </div>
       
-      <div className="text-xs sm:text-sm text-emerald-400 max-w-[80px] sm:max-w-[200px] truncate font-medium">
+      <div className="hidden sm:block text-xs sm:text-sm text-emerald-400 max-w-[200px] truncate font-medium">
         {activeTopic ? activeTopic.name : 'Estudo'}
       </div>
 

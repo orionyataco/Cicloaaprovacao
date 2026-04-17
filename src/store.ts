@@ -139,8 +139,10 @@ interface AppState {
   timerStartTime: string | null;
   timerActiveTopicId: string | null;
   isAuthenticated: boolean;
+  isHydrated: boolean;
   lastUpdate: string | null;
   notifications: AppNotification[];
+  uid: string | null;
 
   // Actions
   setUid: (uid: string | null) => void;
@@ -171,9 +173,10 @@ interface AppState {
   toggleWeeklyRankingFriend: (uid: string) => void;
   setCustomRankingDates: (start: string | null, end: string | null) => void;
   setSharedQuestions: (questions: SharedQuestion[]) => void;
-  addNotification: (notification: Omit<AppNotification, 'id' | 'date' | 'read'>) => void;
+  addNotification: (notification: Omit<AppNotification, 'id' | 'date' | 'read'> & { id?: string }) => void;
   markNotificationAsRead: (id: string) => void;
   deleteNotification: (id: string) => void;
+  deleteAllNotifications: () => void;
   setNotifications: (notifications: AppNotification[]) => void;
   resetAllData: () => void;
   startTimer: (topicId: string | null) => void;
@@ -185,27 +188,11 @@ const generateId = () => Math.random().toString(36).substring(2, 9);
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
-      subjects: [
-        { id: 's1', name: 'Português', color: '#3b82f6' },
-        { id: 's2', name: 'Direito Constitucional', color: '#10b981' },
-      ],
-      topics: [
-        { id: 't1', subjectId: 's1', name: 'Ortografia', status: 'NOT_READ', lastStudiedAt: null, nextReviewAt: null, reviewCount: 0 },
-        { id: 't2', subjectId: 's1', name: 'Crase', status: 'THEORY_DONE', lastStudiedAt: new Date().toISOString(), nextReviewAt: addDays(new Date(), 1).toISOString(), reviewCount: 1 },
-        { id: 't3', subjectId: 's2', name: 'Direitos Fundamentais', status: 'SUMMARY_DONE', lastStudiedAt: new Date().toISOString(), nextReviewAt: addDays(new Date(), 7).toISOString(), reviewCount: 2 },
-      ],
-      questionLogs: [
-        { id: 'q1', topicId: 't2', date: new Date().toISOString(), totalQuestions: 20, correctAnswers: 15, errorReason: 'ATTENTION' },
-        { id: 'q2', topicId: 't3', date: new Date().toISOString(), totalQuestions: 30, correctAnswers: 20, errorReason: 'TRICK' },
-      ],
-      flashcards: [
-        { id: 'f1', topicId: 't2', front: 'Regra geral da crase?', back: 'Fusão da preposição A com o artigo A.', nextReviewAt: new Date().toISOString(), interval: 1, easeFactor: 2.5 },
-        { id: 'f2', topicId: 't3', front: 'O que é o habeas corpus?', back: 'Remédio constitucional para proteger o direito de ir e vir.', nextReviewAt: new Date().toISOString(), interval: 1, easeFactor: 2.5 },
-      ],
-      simulados: [
-        { id: 'sim1', date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), name: 'Simulado 01', score: 65, total: 100, type: 'manual', category: 'simulado' },
-        { id: 'sim2', date: new Date().toISOString(), name: 'Simulado 02', score: 72, total: 100, type: 'manual', category: 'simulado' },
-      ],
+      subjects: [],
+      topics: [],
+      questionLogs: [],
+      flashcards: [],
+      simulados: [],
       studySessions: [],
       editalInfo: {
         carreira: '',
@@ -244,6 +231,7 @@ export const useStore = create<AppState>()(
       timerStartTime: null,
       timerActiveTopicId: null,
       isAuthenticated: false,
+      isHydrated: false,
       lastUpdate: null,
       notifications: [],
 
@@ -488,7 +476,7 @@ export const useStore = create<AppState>()(
         notifications: [
           { 
             ...notification, 
-            id: generateId(), 
+            id: notification.id || generateId(), 
             date: new Date().toISOString(), 
             read: false 
           }, 
@@ -503,6 +491,8 @@ export const useStore = create<AppState>()(
       deleteNotification: (id) => set((state) => ({
         notifications: state.notifications.filter(n => n.id !== id)
       })),
+      
+      deleteAllNotifications: () => set({ notifications: [] }),
 
       setNotifications: (notifications) => set({ notifications }),
 
@@ -529,6 +519,14 @@ export const useStore = create<AppState>()(
           activeDays: [1, 2, 3, 4, 5],
           hoursPerDay: 2,
         },
+        userProfile: {
+          name: 'Estudante',
+          username: '',
+          bio: '',
+          birthDate: '',
+          gender: '',
+          avatar: null,
+        },
         currentCycleIndex: 0,
         followingIds: [],
         weeklyRankingFriendIds: [],
@@ -538,11 +536,13 @@ export const useStore = create<AppState>()(
         activeTopicId: null,
         autoGenerateTopicId: null,
         autoGenerateSubjectId: null,
-        autoGenerateCount: 0,
+        autoGenerateCount: 3,
         lastUpdate: null,
         uid: null,
         timerStartTime: null,
         timerActiveTopicId: null,
+        isAuthenticated: false,
+        isHydrated: false,
       }),
 
       startTimer: (topicId) => set({ 

@@ -161,6 +161,7 @@ REGRAS CRÍTICAS:
    - Se for FGV: Utilize casos práticos e situações-problema.
    - Se for FCC: Foque na literalidade da lei e doutrina clássica.
 4. RIGOR: Evite questões óbvias. Foque em pegadinhas comuns de concurso, exceções à regra e detalhes técnicos.
+5. CONHECIMENTOS REGIONAIS (AMAPÁ): Para temas de História e Geografia do Amapá, você DEVE ser extremamente preciso. Baseie-se em dados reais sobre o Ciclo do Manganês (ICOMI), a criação do Território Federal do Amapá, limites fronteiriços e aspectos demográficos atuais. Não aceite alucinações.
 
 DISTRIBUIÇÃO SOLICITADA:
 ${JSON.stringify(subjectsWithTopics, null, 2)}
@@ -177,14 +178,8 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
   }
 ]`;
 
-      let response;
-      try {
-        const result = await model.generateContent(prompt);
-        response = await result.response;
-      } catch (err: any) {
-        console.error(`Erro na chamada ao ${modelId}:`, err);
-        throw new Error(`Falha na IA (${modelId}): ${err.message}`);
-      }
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
       
       const responseText = response.text();
       if (responseText) {
@@ -225,7 +220,10 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
     }
   }, [autoGenerateTopicId, autoGenerateSubjectId, autoGenerateCount, topics, subjects, generateExam, setAutoGenerateTopicId, setAutoGenerateSubjectId]);
 
-  const finishExam = () => {
+  const [activeSharedId, setActiveSharedId] = useState<string|null>(null);
+  const [activeSharedSenderUid, setActiveSharedSenderUid] = useState<string|null>(null);
+
+  const finishExam = async () => {
     if (!activeExam) return;
     
     let correctCount = 0;
@@ -238,7 +236,6 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
       }
 
       // Track by topic for question logs
-      // Busca a matéria de forma robusta (case-insensitive e trim)
       const subject = subjects.find(s => 
         s.name.trim().toLowerCase() === q.subject.trim().toLowerCase() ||
         s.name.toLowerCase().includes(q.subject.toLowerCase()) ||
@@ -246,7 +243,6 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
       );
 
       if (subject) {
-        // Busca o tópico dentro da matéria de forma robusta
         let topic = topics.find(t => 
           t.subjectId === subject.id && (
             t.name.trim().toLowerCase() === q.topic.trim().toLowerCase() ||
@@ -255,8 +251,6 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
           )
         );
 
-        // Se não encontrar o tópico específico, atribui ao primeiro tópico da matéria
-        // para garantir que o progresso seja contabilizado no dashboard
         if (!topic) {
           topic = topics.find(t => t.subjectId === subject.id);
         }
@@ -273,6 +267,30 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
       }
     });
 
+    // Notificação para o remetente se for questão compartilhada
+    if (activeExamType === 'shared' && activeSharedSenderUid) {
+      try {
+        const isCorrect = correctCount > 0;
+        await addDoc(collection(db, 'notifications'), {
+          toUid: activeSharedSenderUid,
+          fromUid: auth.currentUser?.uid,
+          type: 'system',
+          title: isCorrect ? '🎉 Acertaram sua questão!' : '📚 Resolveram sua questão',
+          message: `${userProfile.name} ${isCorrect ? 'ACERTOU' : 'errou'} a questão que você compartilhou.`,
+          date: new Date().toISOString(),
+          read: false,
+          timestamp: serverTimestamp()
+        });
+        
+        // Apaga a questão da lista do usuário atual pois já foi resolvida
+        if (activeSharedId) {
+          await deleteDoc(doc(db, 'shared_questions', activeSharedId));
+        }
+      } catch (err) {
+        console.error('Erro ao enviar feedback de questão compartilhada:', err);
+      }
+    }
+
     // Log each topic result to question logs
     if (activeExamType !== 'shared') {
       Object.entries(subjectResults).forEach(([topicId, result]) => {
@@ -288,9 +306,6 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
     // Log study session duration
     if (examStartTime) {
       const durationSeconds = Math.floor((Date.now() - examStartTime) / 1000);
-      // Log to the first topic found (or just log a general session if we had a general topic)
-      // For now, let's log the duration to each topic proportionally? 
-      // Or just log one session for the first topic to ensure it's counted in total hours.
       const firstTopicId = Object.keys(subjectResults)[0];
       if (firstTopicId) {
         logStudySession(firstTopicId, durationSeconds);
@@ -307,6 +322,9 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
     });
 
     setExamFinished(true);
+    // Limpa os trackers de compartilhamento
+    setActiveSharedId(null);
+    setActiveSharedSenderUid(null);
   };
 
   const handleConvertToFlashcard = (q: GeneratedQuestion, index: number) => {
@@ -521,16 +539,16 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
   if (activeExam) {
     return (
       <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
-        <header className="flex justify-between items-end border-b border-zinc-800 pb-6">
+        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-zinc-800 pb-6 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-zinc-100 tracking-tight">Simulado e Questões IA</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-zinc-100 tracking-tight">Simulado e Questões IA</h1>
             <p className="text-zinc-400 mt-1">
               {examFinished ? 'Resultados do simulado' : `Questão ${Object.keys(userAnswers).length} de ${activeExam.length} respondidas`}
             </p>
           </div>
           <button 
             onClick={() => setActiveExam(null)}
-            className="text-zinc-400 hover:text-zinc-200 transition-colors"
+            className="text-zinc-400 hover:text-zinc-200 transition-colors text-sm font-medium"
           >
             Sair do Simulado
           </button>
@@ -656,11 +674,12 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <header className="flex justify-between items-end">
+      <header className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-zinc-100">Simulados</h1>
           <p className="text-zinc-400 mt-1">Registre e acompanhe sua evolução em provas completas e questões avulsas.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           {sharedQuestions.length > 0 && (
              <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[10px] font-bold text-amber-500 uppercase tracking-widest animate-pulse">
                 <Users className="w-3 h-3" /> {sharedQuestions.length} novas questões compartilhadas
@@ -712,6 +731,8 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
                   onClick={() => {
                     setActiveExam([shared.question]);
                     setActiveExamType('shared');
+                    setActiveSharedId(shared.id);
+                    setActiveSharedSenderUid(shared.fromUid);
                     setUserAnswers({});
                     setExamStartTime(Date.now());
                     setActiveExamCategory('questoes');

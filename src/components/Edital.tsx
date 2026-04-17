@@ -234,8 +234,9 @@ REGRAS DE VERTICALIZAÇÃO:
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <header className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
+      <header className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-zinc-100">Meu Edital</h1>
           <p className="text-zinc-400 mt-1">Gerencie as disciplinas e tópicos do seu edital.</p>
         </div>
       </header>

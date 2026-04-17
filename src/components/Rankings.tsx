@@ -461,10 +461,10 @@ export function Rankings() {
             </h2>
             <div className="space-y-3">
               {friendsProfiles.map(profile => (
-                <button 
+                <div 
                   key={profile.uid}
                   onClick={() => setSelectedUser(profile)}
-                  className="w-full flex items-center justify-between p-3 bg-zinc-800/30 hover:bg-zinc-800/50 rounded-xl border border-zinc-800 transition-colors group"
+                  className="w-full flex items-center justify-between p-3 bg-zinc-800/30 hover:bg-zinc-800/50 rounded-xl border border-zinc-800 transition-colors group cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 overflow-hidden">
@@ -490,7 +490,7 @@ export function Rankings() {
                     </button>
                     <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:translate-x-1 transition-transform" />
                   </div>
-                </button>
+                </div>
               ))}
               {friendsProfiles.length === 0 && (
                 <div className="text-center py-8 text-zinc-600 text-sm italic">
