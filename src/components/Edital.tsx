@@ -1,13 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { useStore, TopicStatus, EditalInfo } from '@/store';
-import { Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, FileText, RefreshCw, Upload, Loader2, Trash2, AlertTriangle, Edit2, Save, X, Info, ExternalLink, CalendarDays, CalendarClock, Brain, Youtube, Link as LinkIcon } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, FileText, RefreshCw, Trash2, AlertTriangle, Edit2, Save, X, Info, ExternalLink, CalendarDays, CalendarClock, Brain, Youtube, Link as LinkIcon, Search, Sparkles, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Ciclo } from './Ciclo';
 import { Cronograma } from './Cronograma';
 
 export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) {
-  const { subjects, topics, addSubject, addTopic, updateTopicStatus, importEdital, deleteSubject, deleteAllSubjects, editalInfo, updateEditalInfo, setActiveTopicId, activeTopicId, setAutoGenerateTopicId, setAutoGenerateSubjectId, updateTopicLinks } = useStore();
+  const { subjects, topics, addSubject, addTopic, updateTopicStatus, importEdital, deleteSubject, deleteAllSubjects, editalInfo, updateEditalInfo, setActiveTopicId, activeTopicId, setAutoGenerateTopicId, setAutoGenerateSubjectId, updateTopicLinks, updateTopicSummary } = useStore();
   const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
   const [genCounts, setGenCounts] = useState<Record<string, number>>({});
   const [isBulkAddModalOpen, setIsBulkAddModalOpen] = useState(false);
@@ -15,12 +15,19 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newTopicName, setNewTopicName] = useState('');
   const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [toast, setToast] = useState<{text: string, type: 'success' | 'error'} | null>(null);
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [tempInfo, setTempInfo] = useState<EditalInfo>(editalInfo);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSearchingYoutube, setIsSearchingYoutube] = useState(false);
+  const [youtubeSuggestions, setYoutubeSuggestions] = useState<{title: string, url: string}[]>([]);
+  const [isYoutubeModalOpen, setIsYoutubeModalOpen] = useState(false);
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [youtubeSearchTerm, setYoutubeSearchTerm] = useState<string>('');
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [activeSummary, setActiveSummary] = useState<{topicName: string, content: string} | null>(null);
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  const summaryRef = useRef<HTMLDivElement>(null);
 
   const handleSaveInfo = () => {
     updateEditalInfo(tempInfo);
@@ -40,128 +47,101 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
 
   const getRandomColor = () => `#${Math.floor(Math.random()*16777215).toString(16)}`;
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    if (file.type !== 'application/pdf') {
-      showToast('Por favor, envie um arquivo PDF.', 'error');
-      return;
+  const callGeminiWithFallback = async (prompt: string, isJson: boolean = false) => {
+    const apiKey = (import.meta.env.VITE_GEMINI_API_KEY_V2 || import.meta.env.VITE_GEMINI_API_KEY)?.replace(/['"]/g, '').trim();
+    if (!apiKey) {
+      showToast('API Key do Gemini não configurada.', 'error');
+      return null;
     }
 
-    if (file.size > 15 * 1024 * 1024) { // 15MB limit (base64 will be ~20MB)
-      showToast('O arquivo é muito grande (máximo 15MB).', 'error');
-      return;
-    }
-
-    setIsUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        try {
-          const base64String = (reader.result as string).split(',')[1];
-          const apiKey = (import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY_V2)?.replace(/['"]/g, '').trim();
-          
-          if (!apiKey) {
-            showToast('API Key do Gemini não configurada.', 'error');
-            setIsUploading(false);
-            return;
-          }
-          
-          const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ 
-            model: "gemini-2.5-flash-lite"
-          }, { apiVersion: 'v1' });
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" }, { apiVersion: 'v1beta' });
+      
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      if (!text) throw new Error('Resposta vazia da IA');
 
-          console.log(`Iniciando análise com Gemini 2.0. Arquivo: ${file.name}`);
-          
-          const prompt = `Você é um especialista em estruturação de editais de concursos (Verticalização de Edital). Analise o PDF em anexo e extraia rigorosamente o "CONTEÚDO PROGRAMÁTICO".
-
-Retorne um objeto JSON seguindo EXATAMENTE este formato:
-{
-  "disciplinas": [
-    {
-      "subject": "Nome da Matéria",
-      "topics": ["Tópico 1", "Tópico 2"]
+      if (isJson) {
+        const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(cleanText);
+      }
+      return text;
+    } catch (err: any) {
+      console.error('[Gemini] Erro crítico:', err);
+      showToast(`Erro na IA: ${err.message || 'Falha na comunicação'}`, 'error');
+      throw err;
     }
-  ]
-}
+  };
 
-REGRAS DE VERTICALIZAÇÃO:
-1. Decomponha tópicos compostos (separados por vírgula, ponto ou ponto-e-vírgula) em itens individuais.
-2. Remova números de itens e referências burocráticas da banca. 
-3. Mantenha apenas o nome direto do assunto.`;
+  const handleYoutubeSearch = async (topicId: string, topicName: string) => {
+    setSelectedTopicId(topicId);
+    setYoutubeSearchTerm(topicName);
+    setIsSearchingYoutube(true);
+    setIsYoutubeModalOpen(true);
+    setYoutubeSuggestions([]);
 
-          let response;
-          try {
-            const result = await model.generateContent([
-              {
-                inlineData: {
-                  data: base64String,
-                  mimeType: file.type
-                }
-              },
-              { text: prompt }
-            ]);
-            response = await result.response;
-          } catch (err: any) {
-             console.error('Primeira tentativa falhou:', err);
-             // Tenta o modelo Pro como fallback em caso de qualquer erro, inclusive 404 ou 429
-             console.log('Tentando modelo alternativo (gemini-2.0-flash)...');
-             try {
-               const fallbackModel = genAI.getGenerativeModel({ 
-                 model: "gemini-2.5-flash-lite"
-               });
-               const result = await fallbackModel.generateContent([
-                 { inlineData: { data: base64String, mimeType: file.type } },
-                 { text: prompt }
-               ]);
-               response = await result.response;
-             } catch (fallbackErr: any) {
-               console.log('Tentativa Pro falhou, tentando gemini-pro legado...');
-               try {
-                 const legacyModel = genAI.getGenerativeModel({ model: "gemini-pro" });
-                 const result = await legacyModel.generateContent([
-                   { inlineData: { data: base64String, mimeType: file.type } },
-                   { text: prompt }
-                 ]);
-                 response = await result.response;
-               } catch (legacyErr) {
-                 console.error('Todas as tentativas falharam:', legacyErr);
-                 throw new Error('Falha ao processar PDF com IA. Verifique sua chave API no AI Studio e se o serviço está habilitado.');
-               }
-             }
-          }
+    try {
+      const prompt = `Você é um assistente de estudos para concursos. O aluno está estudando o tópico "${topicName}". 
+      Sugira 5 termos de busca específicos e otimizados que tragam as melhores vídeo-aulas no YouTube para este assunto.
+      Pense em títulos de vídeos de canais famosos de concurso ou termos técnicos que filtram o melhor conteúdo.
+      
+      Retorne APENAS um objeto JSON válido seguindo este formato:
+      {
+        "suggestions": [
+          { "title": "Ex: Aula Completa de Direito Civil - Artigo 1 ao 10", "searchTerm": "Direito Civil Artigo 1 ao 10 concurso aula completa" }
+        ]
+      }`;
 
-          const responseText = response.text();
+      const data = await callGeminiWithFallback(prompt, true);
+      
+      if (data && data.suggestions && Array.isArray(data.suggestions)) {
+        setYoutubeSuggestions(data.suggestions.map((s: any) => ({
+          title: s.title,
+          url: `https://www.youtube.com/results?search_query=${encodeURIComponent(s.searchTerm)}`
+        })));
+      }
+    } catch (err: any) {
+      console.error('Erro ao buscar vídeos:', err);
+      showToast(`Erro ao buscar vídeos: ${err.message || 'Erro desconhecido'}`, 'error');
+    } finally {
+      setIsSearchingYoutube(false);
+    }
+  };
 
-          if (responseText) {
-            const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const data = JSON.parse(cleanText);
-            
-            if (data.disciplinas && Array.isArray(data.disciplinas)) {
-              importEdital(data.disciplinas);
-              showToast('Edital importado com sucesso!', 'success');
-            } else {
-              showToast('Não foi possível extrair o conteúdo programático deste PDF.', 'error');
-            }
-          } else {
-            throw new Error('A IA não retornou texto.');
-          }
-        } catch (err: any) {
-          console.error('ERRO SDK:', err);
-          showToast(`Erro ao processar PDF: ${err.message || 'Erro desconhecido'}`, 'error');
-        } finally {
-          setIsUploading(false);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (error) {
-      console.error('Erro ao ler arquivo:', error);
-      showToast('Erro ao ler o arquivo.', 'error');
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+  const handleGenerateSummary = async (topicId: string, topicName: string, subjectName: string) => {
+    setIsGeneratingSummary(true);
+    setIsSummaryModalOpen(true);
+    setActiveSummary({ topicName, content: 'Gerando resumo incrível para você...' });
+
+    try {
+      const prompt = `Você é um professor especialista em concursos públicos, conhecido por ser extremamente didático, compreensivo e direto ao ponto.
+      
+      Gere um RESUMO COMPLETO sobre o assunto "${topicName}" da matéria "${subjectName}".
+      
+      O resumo deve conter:
+      1. Introdução clara ao conceito.
+      2. Pontos fundamentais que MAIS CAEM em prova.
+      3. MACETES (mnemônicos ou dicas) para não esquecer.
+      4. EXEMPLOS práticos.
+      5. Uma conclusão rápida.
+      
+      Use formatação Markdown (negrito, listas, etc) para facilitar a leitura. Seja visualmente organizado.`;
+
+      const content = await callGeminiWithFallback(prompt);
+      
+      if (content) {
+        setActiveSummary({ topicName, content });
+        updateTopicSummary(topicId, content);
+      }
+    } catch (err: any) {
+      console.error('Erro ao gerar resumo:', err);
+      showToast(`Erro ao gerar resumo: ${err.message || 'Erro desconhecido'}`, 'error');
+      setIsSummaryModalOpen(false);
+    } finally {
+      setIsGeneratingSummary(false);
     }
   };
 
@@ -405,23 +385,6 @@ REGRAS DE VERTICALIZAÇÃO:
               )
             )}
 
-            <input 
-              type="file" 
-              accept="application/pdf" 
-              className="hidden" 
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-            />
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="flex-1 sm:flex-none bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              <span className="hidden sm:inline">{isUploading ? 'Analisando PDF...' : 'Importar PDF'}</span>
-              <span className="sm:hidden">{isUploading ? '...' : 'PDF'}</span>
-            </button>
-
             <button 
               onClick={() => setIsBulkAddModalOpen(true)}
               className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-2"
@@ -530,15 +493,31 @@ REGRAS DE VERTICALIZAÇÃO:
                               className="w-8 bg-transparent text-center text-[10px] font-bold text-zinc-300 focus:outline-none"
                             />
                             <button
-                              onClick={() => {
-                                setAutoGenerateTopicId(topic.id, genCounts[topic.id] || 3);
-                                onViewChange('simulados');
-                              }}
-                              className="p-1 hover:bg-emerald-500/10 text-emerald-500/60 hover:text-emerald-400 rounded transition-all"
-                              title="Gerar questões deste assunto"
-                            >
-                              <Brain className="w-3.5 h-3.5" />
-                            </button>
+                               onClick={() => {
+                                 setAutoGenerateTopicId(topic.id, genCounts[topic.id] || 3);
+                                 onViewChange('simulados');
+                               }}
+                               className="p-1 hover:bg-emerald-500/10 text-emerald-500/60 hover:text-emerald-400 rounded transition-all"
+                               title="Gerar questões"
+                             >
+                               <Brain className="w-3.5 h-3.5" />
+                             </button>
+
+                             <button
+                               onClick={() => handleYoutubeSearch(topic.id, topic.name)}
+                               className="p-1 hover:bg-red-500/10 text-red-500/60 hover:text-red-400 rounded transition-all"
+                               title="Sugestões do YouTube"
+                             >
+                               <Youtube className="w-3.5 h-3.5" />
+                             </button>
+
+                             <button
+                               onClick={() => handleGenerateSummary(topic.id, topic.name, subject.name)}
+                               className="p-1 hover:bg-amber-500/10 text-amber-500/60 hover:text-amber-400 rounded transition-all"
+                               title="Gerar Resumo IA"
+                             >
+                               <Sparkles className="w-3.5 h-3.5" />
+                             </button>
                           </div>
 
                           <select
@@ -688,6 +667,173 @@ REGRAS DE VERTICALIZAÇÃO:
                   Cancelar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* YouTube Suggestions Modal */}
+      {isYoutubeModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-500/10 rounded-lg">
+                  <Youtube className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-zinc-100">Sugestões YouTube</h2>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Vincular material ao tópico</p>
+                </div>
+              </div>
+              <button onClick={() => setIsYoutubeModalOpen(false)} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-zinc-300">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {isSearchingYoutube ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <Loader2 className="w-10 h-10 text-red-500 animate-spin" />
+                  <p className="text-zinc-400 text-sm">IA buscando as melhores aulas...</p>
+                  <p className="text-[10px] text-zinc-600 px-4 text-center italic">
+                    Nota: Utilizamos IA para curadoria interna devido a restrições de busca direta (CORS).
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between bg-red-500/5 border border-red-500/10 p-4 rounded-xl">
+                    <div className="text-xs text-zinc-400 pr-4">
+                      Não encontrou? Busque no site oficial:
+                    </div>
+                    <a 
+                      href={`https://www.youtube.com/results?search_query=${encodeURIComponent(youtubeSearchTerm + ' concurso')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shrink-0"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Abrir YouTube
+                    </a>
+                  </div>
+
+                  <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                    {youtubeSuggestions.length > 0 ? (
+                      <div className="space-y-3">
+                        <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">
+                          Sugestões de busca por IA para este tópico:
+                        </h4>
+                        {youtubeSuggestions.map((suggestion, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-zinc-800/30 border border-zinc-800 rounded-xl hover:border-blue-500/30 transition-all group">
+                            <div className="flex-1 mr-4 min-w-0">
+                              <div className="text-xs font-bold text-zinc-200 truncate group-hover:text-blue-400 transition-colors">
+                                {suggestion.title}
+                              </div>
+                              <div className="text-[10px] text-zinc-500 mt-1">
+                                Clique para pesquisar esta aula no YouTube
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <a 
+                                href={suggestion.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 bg-blue-600/10 hover:bg-blue-600 text-blue-400 hover:text-white rounded-lg transition-all"
+                                title="Pesquisar no YouTube"
+                              >
+                                <Search size={14} />
+                              </a>
+                              <button
+                                onClick={() => {
+                                  updateTopicLinks(selectedTopicId!, { youtubeLink: suggestion.url });
+                                  showToast('Busca vinculada ao tópico!', 'success');
+                                }}
+                                className="p-2 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-lg transition-all"
+                                title="Vincular busca ao tópico"
+                              >
+                                <Check size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 text-zinc-500 italic text-sm">
+                        Nenhum termo de busca sugerido.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-4 border-t border-zinc-800">
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Vincular link manual</p>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        placeholder="Cole o link do YouTube aqui..."
+                        id="manual-youtube-input"
+                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                      />
+                      <button 
+                        onClick={() => {
+                          const input = document.getElementById('manual-youtube-input') as HTMLInputElement;
+                          if (input.value) {
+                            updateTopicLinks(selectedTopicId!, { youtubeLink: input.value });
+                            setIsYoutubeModalOpen(false);
+                            showToast('Link vinculado!', 'success');
+                          }
+                        }}
+                        className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-lg text-xs font-bold transition-all"
+                      >
+                        Vincular
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Summary Modal */}
+      {isSummaryModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-500/10 rounded-lg">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-zinc-100">Resumo do Especialista</h2>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">{activeSummary?.topicName}</p>
+                </div>
+              </div>
+              <button onClick={() => setIsSummaryModalOpen(false)} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-zinc-300">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-zinc-950/30">
+              {isGeneratingSummary ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
+                  <p className="text-zinc-400 font-medium">O especialista está escrevendo...</p>
+                </div>
+              ) : (
+                <div className="prose prose-invert max-w-none text-zinc-300 text-sm sm:text-base leading-relaxed whitespace-pre-wrap">
+                  {activeSummary?.content}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
+              <button 
+                onClick={() => setIsSummaryModalOpen(false)}
+                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-6 py-2 rounded-xl font-bold transition-all"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>

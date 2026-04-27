@@ -39,6 +39,7 @@ export interface Topic {
   reviewCount: number;
   youtubeLink?: string;
   driveLink?: string;
+  summary?: string;
 }
 
 export interface QuestionLog {
@@ -152,6 +153,7 @@ interface AppState {
   addTopic: (topic: Omit<Topic, 'id' | 'lastStudiedAt' | 'nextReviewAt' | 'reviewCount'>) => void;
   updateTopicStatus: (id: string, status: TopicStatus) => void;
   updateTopicLinks: (id: string, links: { youtubeLink?: string; driveLink?: string }) => void;
+  updateTopicSummary: (id: string, summary: string) => void;
   logStudySession: (topicId: string, durationSeconds: number) => void;
   setActiveTopicId: (id: string | null) => void;
   setAutoGenerateTopicId: (id: string | null, count?: number) => void;
@@ -259,6 +261,10 @@ export const useStore = create<AppState>()(
 
       updateTopicLinks: (id, links) => set((state) => ({
         topics: state.topics.map(t => t.id === id ? { ...t, ...links } : t)
+      })),
+      
+      updateTopicSummary: (id, summary) => set((state) => ({
+        topics: state.topics.map(t => t.id === id ? { ...t, summary } : t)
       })),
 
       updateTopicStatus: (id, status) => set((state) => {

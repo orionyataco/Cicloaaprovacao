@@ -101,30 +101,22 @@ export function Simulados() {
       alert('Selecione pelo menos uma questão.');
       return;
     }
-
     setIsGenerating(true);
     try {
-      // Inicializa com a chave V2
-      // Priorizamos a V2 que vimos no seu .env
-      const apiKey = (import.meta.env.VITE_GEMINI_API_KEY_V2 || import.meta.env.VITE_GEMINI_API_KEY)?.replace(/['"]/g, '').trim();
-      
-      if (!apiKey) {
-        alert('API Key V2 não encontrada no .env');
-        setIsGenerating(false);
-        return;
-      }
+      const callGeminiWithFallback = async (prompt: string) => {
+        const apiKey = (import.meta.env.VITE_GEMINI_API_KEY_V2 || import.meta.env.VITE_GEMINI_API_KEY)?.replace(/['"]/g, '').trim();
+        if (!apiKey) throw new Error('API Key não encontrada');
 
-      console.log('Usando Chave API (final):', apiKey.substring(0, 10) + '...');
-      const genAI = new GoogleGenerativeAI(apiKey);
-      
-      // Usando gemini-1.5-flash que é rápido, estável e gratuito no plano free tier
-      const modelId = "gemini-2.5-flash-lite"; 
-      console.log('Utilizando modelo estável para geração:', modelId);
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" }, { apiVersion: 'v1beta' });
+        
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+      };
 
-      const model = genAI.getGenerativeModel({ 
-        model: modelId
-      }, { apiVersion: 'v1' });
-      
+      console.log('Iniciando geração de simulado...');
+
       const isCespe = editalInfo.banca.toLowerCase().includes('cespe') || editalInfo.banca.toLowerCase().includes('cebraspe');
       const promptType = isCespe ? 'Certo/Errado (apenas 2 alternativas)' : 'múltipla escolha (5 alternativas)';
 
@@ -178,10 +170,8 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
   }
 ]`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
+      const responseText = await callGeminiWithFallback(prompt);
       
-      const responseText = response.text();
       if (responseText) {
         const jsonMatch = responseText.match(/\[[\s\S]*\]/);
         const cleanText = jsonMatch ? jsonMatch[0] : responseText.replace(/```json/g, '').replace(/```/g, '').trim();
