@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Timer } from './components/Timer';
 import { Dashboard } from './components/Dashboard';
 import { Edital } from './components/Edital';
@@ -7,6 +7,7 @@ import { Simulados } from './components/Simulados';
 import { Account } from './components/Account';
 import { Login } from './components/Login';
 import { Signup } from './components/Signup';
+import { SharedQuestionView } from './components/SharedQuestionView';
 import { useStore } from './store';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 import { auth } from './lib/firebase';
@@ -25,6 +26,19 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
 
+  // Detecta parâmetro ?q= para questões compartilhadas publicamente
+  const [sharedQuestionId, setSharedQuestionId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('q');
+  });
+
+  const clearSharedParam = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('q');
+    window.history.replaceState({}, '', url.pathname);
+    setSharedQuestionId(null);
+  };
+
   const navItems = [
     { id: 'dashboard', label: 'Relatórios de Performance', icon: LayoutDashboard },
     { id: 'edital', label: 'Meu Edital', icon: ListTodo },
@@ -37,6 +51,23 @@ export default function App() {
     setCurrentView(view);
     setIsSidebarOpen(false);
   };
+
+  // Se há um parâmetro ?q= e o usuário NÃO está autenticado, mostra a view pública
+  if (sharedQuestionId && !isAuthenticated) {
+    return (
+      <SharedQuestionView
+        questionId={sharedQuestionId}
+        onGoToSignup={() => { clearSharedParam(); setIsSignup(true); }}
+        onGoToLogin={() => { clearSharedParam(); }}
+      />
+    );
+  }
+
+  // Se há um parâmetro ?q= e o usuário ESTÁ autenticado, limpa o parâmetro
+  // (o usuário já está dentro da plataforma)
+  if (sharedQuestionId && isAuthenticated) {
+    clearSharedParam();
+  }
 
   if (!isAuthenticated) {
     if (isSignup) {

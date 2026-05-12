@@ -2,10 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useStore } from '@/store';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, AlertTriangle, Trash2, BrainCircuit, Share2, Users, Search } from 'lucide-react';
+import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, AlertTriangle, Trash2, BrainCircuit, Share2, Users, Search, ExternalLink } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { db, auth } from '@/lib/firebase';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc, limit, setDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { GeneratedQuestion, SharedQuestion } from '@/store';
 
@@ -45,6 +45,11 @@ export function Simulados() {
   const [friendSearchQuery, setFriendSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{uid: string, name: string, username: string}[]>([]);
   const [isSearchingFriends, setIsSearchingFriends] = useState(false);
+
+  // External Share State
+  const [externalShareLink, setExternalShareLink] = useState<string | null>(null);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -427,6 +432,68 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
     setIsShareModalOpen(false);
     setFriendSearchQuery('');
     setSearchResults([]);
+    setExternalShareLink(null);
+    setLinkCopied(false);
+  };
+
+  const shareExternally = async () => {
+    if (!questionToShare || !auth.currentUser) return;
+    setIsGeneratingLink(true);
+    try {
+      const shareId = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+      await setDoc(doc(db, 'public_questions', shareId), {
+        fromName: userProfile.name,
+        fromAvatar: userProfile.avatar || null,
+        fromUid: auth.currentUser.uid,
+        question: questionToShare,
+        date: new Date().toISOString(),
+        views: 0,
+        solves: 0,
+        timestamp: serverTimestamp()
+      });
+
+      const baseUrl = window.location.origin + window.location.pathname;
+      const link = `${baseUrl}?q=${shareId}`;
+      setExternalShareLink(link);
+    } catch (err) {
+      console.error('Erro ao gerar link externo:', err);
+      alert('Erro ao gerar link de compartilhamento.');
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  };
+
+  const copyExternalLink = async () => {
+    if (!externalShareLink) return;
+    try {
+      await navigator.clipboard.writeText(externalShareLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 3000);
+    } catch {
+      // Fallback
+      const textarea = document.createElement('textarea');
+      textarea.value = externalShareLink;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 3000);
+    }
+  };
+
+  const nativeShare = async () => {
+    if (!externalShareLink || !questionToShare) return;
+    try {
+      await navigator.share({
+        title: 'Desafio - Ciclo a Aprovação',
+        text: `${userProfile.name} te enviou uma quest\u00e3o de ${questionToShare.subject}. Mostre que voc\u00ea consegue resolver!`,
+        url: externalShareLink
+      });
+    } catch (err) {
+      // User cancelled or not supported
+      console.log('Share cancelled or not supported:', err);
+    }
   };
 
   const displayedFriends = friendSearchQuery.trim() ? searchResults : friends;
@@ -501,6 +568,71 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
              </div>
            )}
         </div>
+
+         {/* Divider */}
+         <div className="flex items-center gap-3 my-4">
+           <div className="flex-1 h-px bg-zinc-800" />
+           <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">ou compartilhe externamente</span>
+           <div className="flex-1 h-px bg-zinc-800" />
+         </div>
+
+         {/* External Share Section */}
+         <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5">
+           {!externalShareLink ? (
+             <div className="text-center">
+               <p className="text-sm text-zinc-400 mb-4">
+                 Gere um link público para enviar por <span className="text-emerald-400 font-semibold">WhatsApp</span>, <span className="text-blue-400 font-semibold">Telegram</span>, ou qualquer rede social.
+               </p>
+               <p className="text-[10px] text-zinc-600 mb-4">A pessoa poderá resolver a questão sem precisar ter conta. Depois, ela escolhe se quer criar uma.</p>
+               <button
+                 onClick={shareExternally}
+                 disabled={isGeneratingLink}
+                 className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-zinc-700 disabled:to-zinc-700 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-500/10"
+               >
+                 {isGeneratingLink ? (
+                   <><Loader2 className="w-4 h-4 animate-spin" /> Gerando link...</>
+                 ) : (
+                   <><ExternalLink className="w-4 h-4" /> Gerar Link de Convite</>  
+                 )}
+               </button>
+             </div>
+           ) : (
+             <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
+               <div className="flex items-center gap-2 mb-2">
+                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                 <span className="text-sm font-bold text-emerald-400">Link gerado com sucesso!</span>
+               </div>
+               <div className="flex items-center gap-2">
+                 <input
+                   type="text"
+                   readOnly
+                   value={externalShareLink}
+                   className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-xs text-zinc-300 font-mono select-all focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                   onClick={(e) => (e.target as HTMLInputElement).select()}
+                 />
+                 <button
+                   onClick={copyExternalLink}
+                   className={cn(
+                     "px-4 py-2.5 rounded-lg text-xs font-bold transition-all border shrink-0",
+                     linkCopied
+                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                       : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700"
+                   )}
+                 >
+                   {linkCopied ? '✓ Copiado!' : 'Copiar'}
+                 </button>
+               </div>
+               {typeof navigator.share === 'function' && (
+                 <button
+                   onClick={nativeShare}
+                   className="w-full bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
+                 >
+                   <Share2 className="w-4 h-4" /> Enviar via WhatsApp / Redes Sociais
+                 </button>
+               )}
+             </div>
+           )}
+         </div>
       </div>
     </div>
   );
