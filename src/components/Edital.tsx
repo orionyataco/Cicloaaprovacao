@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useStore, TopicStatus, EditalInfo } from '@/store';
 import { Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, FileText, RefreshCw, Trash2, AlertTriangle, Edit2, Save, X, Info, ExternalLink, CalendarDays, CalendarClock, Brain, Youtube, Link as LinkIcon, Search, Sparkles, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { callGemini, callGeminiJSON } from '@/lib/gemini';
 import { Ciclo } from './Ciclo';
 import { Cronograma } from './Cronograma';
 
@@ -47,32 +47,16 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
 
   const getRandomColor = () => `#${Math.floor(Math.random()*16777215).toString(16)}`;
 
-  const callGeminiWithFallback = async (prompt: string, isJson: boolean = false) => {
-    const apiKey = (import.meta.env.VITE_GEMINI_API_KEY_V2 || import.meta.env.VITE_GEMINI_API_KEY)?.replace(/['"]/g, '').trim();
-    if (!apiKey) {
-      showToast('API Key do Gemini não configurada.', 'error');
-      return null;
-    }
-
+  const callGeminiSafe = async <T = string>(prompt: string, isJson = false): Promise<T | null> => {
     try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" }, { apiVersion: 'v1beta' });
-      
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-      
-      if (!text) throw new Error('Resposta vazia da IA');
-
       if (isJson) {
-        const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        return JSON.parse(cleanText);
+        return await callGeminiJSON<T>(prompt);
       }
-      return text;
+      return await callGemini(prompt) as T;
     } catch (err: any) {
       console.error('[Gemini] Erro crítico:', err);
       showToast(`Erro na IA: ${err.message || 'Falha na comunicação'}`, 'error');
-      throw err;
+      return null;
     }
   };
 
@@ -95,7 +79,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
         ]
       }`;
 
-      const data = await callGeminiWithFallback(prompt, true);
+      const data = await callGeminiSafe<{ suggestions: { title: string; searchTerm: string }[] }>(prompt, true);
       
       if (data && data.suggestions && Array.isArray(data.suggestions)) {
         setYoutubeSuggestions(data.suggestions.map((s: any) => ({
@@ -130,7 +114,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
       
       Use formatação Markdown (negrito, listas, etc) para facilitar a leitura. Seja visualmente organizado.`;
 
-      const content = await callGeminiWithFallback(prompt);
+      const content = await callGeminiSafe(prompt);
       
       if (content) {
         setActiveSummary({ topicName, content });

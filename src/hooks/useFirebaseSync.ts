@@ -94,10 +94,6 @@ export function useFirebaseSync() {
               useStore.getState().login();
               useStore.getState().setUid(user.uid);
             }
-
-            // Inicia escuta de questões compartilhadas e notificações
-            setupListeners(user.uid);
-
           } else {
             // Usuário novo — Não resetamos se ele acabou de criar dados offline, 
             // mas marcamos o UID para posse desses dados.
@@ -105,6 +101,9 @@ export function useFirebaseSync() {
             useStore.getState().setUid(user.uid);
             console.log('[Firebase] Novo usuário logado, aguardando sincronização do estado local.');
           }
+
+          // Inicia escuta de questões compartilhadas e notificações para qualquer usuário autenticado
+          setupListeners(user.uid);
         } catch (error) {
           console.error('[Firebase] Erro ao carregar dados:', error);
           useStore.getState().setUid(user.uid);
@@ -139,8 +138,6 @@ export function useFirebaseSync() {
           console.error('[Firebase] Erro no listener de questões compartilhadas:', error);
         }
       });
-
-      if (!uid) return;
 
       const nq = query(collection(db, 'notifications'), where('toUid', '==', uid), limit(20));
       notificationsUnsubscribe.current = onSnapshot(nq, (snapshot) => {

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useStore, ErrorReason } from '@/store';
-import { isBefore, startOfDay, format, parseISO, getDay } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { isBefore, startOfDay, parseISO, getDay } from 'date-fns';
 import { CheckCircle2, AlertTriangle, Brain, Target, Clock, BookMarked, BookOpen, X, Save, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

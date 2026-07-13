@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, LogIn, CheckCircle2, BookOpen, GraduationCap, RefreshCw } from 'lucide-react';
-import { cn } from '../lib/utils';
-import { auth } from '../lib/firebase';
+import { cn } from '@/lib/utils';
+import { auth } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
 interface LoginProps {

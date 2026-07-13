@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { useStore, AppNotification, NotificationType } from '../store';
+import { useStore, AppNotification, NotificationType } from '@/store';
 import { Bell, BellDot, X, Check, Trash2, UserPlus, Brain, Calendar, Info } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
-import { db } from '../lib/firebase';
+import { db } from '@/lib/firebase';
 import { doc, updateDoc, deleteDoc as deleteCloudDoc, writeBatch, collection } from 'firebase/firestore';
 
 export function NotificationCenter() {

@@ -3,10 +3,10 @@ import { useStore } from '@/store';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, AlertTriangle, Trash2, BrainCircuit, Share2, Users, Search, ExternalLink } from 'lucide-react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc, limit, setDoc } from 'firebase/firestore';
-import { cn } from '@/lib/utils';
+import { cn, fetchDocsByIds } from '@/lib/utils';
+import { callGemini } from '@/lib/gemini';
 import { GeneratedQuestion, SharedQuestion } from '@/store';
 
 // Removido interface GeneratedQuestion local pois foi movida para o store.ts
@@ -108,18 +108,6 @@ export function Simulados() {
     }
     setIsGenerating(true);
     try {
-      const callGeminiWithFallback = async (prompt: string) => {
-        const apiKey = (import.meta.env.VITE_GEMINI_API_KEY_V2 || import.meta.env.VITE_GEMINI_API_KEY)?.replace(/['"]/g, '').trim();
-        if (!apiKey) throw new Error('API Key não encontrada');
-
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" }, { apiVersion: 'v1beta' });
-        
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        return response.text();
-      };
-
       console.log('Iniciando geração de simulado...');
 
       const isCespe = editalInfo.banca.toLowerCase().includes('cespe') || editalInfo.banca.toLowerCase().includes('cebraspe');
@@ -147,35 +135,104 @@ export function Simulados() {
       const category = subjectsWithTopics.length > 1 ? 'simulado' : 'questoes';
       setActiveExamCategory(category);
 
+      const examplesByBanca = {
+        cespe: {
+          style: 'Certo/Errado com afirmações categóricas que exigem julgamento objetivo',
+          example: {
+            subject: 'Direito Constitucional',
+            topic: 'Art. 5º da CF - Direitos e Garantias Fundamentais',
+            text: 'À luz da Constituição Federal de 1988 e do entendimento consolidado do STF, é legítima a decretação de prisão preventiva com fundamento exclusivo na gravidade abstrata do delito, independentemente de demonstração de contemporaneidade do risco processual.',
+            options: ['Certo', 'Errado'],
+            correctIndex: 1,
+            explanation: 'Errado. O STF firmou entendimento (HC 104.339) de que a prisão preventiva não pode ser decretada com base exclusivamente na gravidade abstrata do crime. É necessária a demonstração concreta de contemporaneidade dos requisitos do art. 312 do CPP.'
+          }
+        },
+        fgv: {
+          style: 'Casos práticos e situações-problema com 5 alternativas',
+          example: {
+            subject: 'Raciocínio Lógico',
+            topic: 'Estruturas Lógicas',
+            text: 'Em uma repartição pública, os analistas A, B e C fazem afirmações sobre seus próprios cargos: A diz "B é analista administrativo"; B diz "C é analista judiciário"; C diz "A não é analista administrativo". Sabe-se que apenas um deles mente. Se A é analista administrativo, quem é analista judiciário?',
+            options: ['Apenas B', 'Apenas C', 'B e C', 'A e C', 'Nenhum'],
+            correctIndex: 0,
+            explanation: 'Se A é analista administrativo, a afirmação de C ("A não é analista administrativo") é falsa, então C mente. Como apenas um mente, A e B falam a verdade. B diz que C é analista judiciário → contradição (C mente, mas isso não impede). Na verdade, se C mente, sua afirmação é falsa → A é analista administrativo (ok). B verdade → C é analista judiciário. Logo B é analista judiciário. Alternativa A.'
+          }
+        },
+        fcc: {
+          style: 'Literalidade da lei e doutrina clássica com 5 alternativas',
+          example: {
+            subject: 'Direito Administrativo',
+            topic: 'Atos Administrativos - Atributos',
+            text: 'A presunção de legitimidade dos atos administrativos é um atributo que impõe ao administrado o ônus de provar eventual ilegalidade. Contudo, tal presunção é relativa (juris tantum), admitindo prova em contrário. Nesse contexto, assinale a alternativa correta:',
+            options: [
+              'A presunção de legitimidade é absoluta para atos vinculados.',
+              'A presunção de legitimidade impede o controle judicial do ato.',
+              'A presunção de legitimidade é relativa e admite prova em contrário.',
+              'A presunção de legitimidade aplica-se apenas a atos discricionários.',
+              'A presunção de legitimidade cessa com a edição do ato.'
+            ],
+            correctIndex: 2,
+            explanation: 'Art. 2º da LINDB c/c doutrina de Maria Sylvia Di Pietro. A presunção de legitimidade é relativa (juris tantum), ou seja, admite prova em contrário. Não é absoluta, não impede controle judicial e aplica-se a todos os atos administrativos.'
+          }
+        }
+      };
+
+      const bancaLower = editalInfo.banca.toLowerCase();
+      const chooseExample = bancaLower.includes('cespe') || bancaLower.includes('cebraspe') ? examplesByBanca.cespe
+        : bancaLower.includes('fgv') ? examplesByBanca.fgv
+        : bancaLower.includes('fcc') ? examplesByBanca.fcc
+        : examplesByBanca.fgv;
+
       const prompt = `Você é um professor especialista em concursos públicos brasileiros, com vasta experiência em bancas como Cebraspe/Cespe, FGV e FCC.
-Sua tarefa é gerar questões inéditas e de alto nível técnico no formato ${promptType} para a banca examinadora: ${editalInfo.banca || 'Padrão Profissional (FGV/FCC/Cespe)'}.
 
-REGRAS CRÍTICAS:
-1. LEGISLAÇÃO: Para disciplinas de Direito, utilize a Constituição Federal, Leis Secas e Códigos vigentes. Nunca invente leis.
-2. JURISPRUDÊNCIA: Se aplicável, utilize entendimentos pacificados do STF e STJ.
-3. ESTILO DA BANCA: 
-   - Se for Cespe: Foque em afirmações categóricas que exijam julgamento.
-   - Se for FGV: Utilize casos práticos e situações-problema.
-   - Se for FCC: Foque na literalidade da lei e doutrina clássica.
-4. RIGOR: Evite questões óbvias. Foque em pegadinhas comuns de concurso, exceções à regra e detalhes técnicos.
-5. CONHECIMENTOS REGIONAIS (AMAPÁ): Para temas de História e Geografia do Amapá, você DEVE ser extremamente preciso. Baseie-se em dados reais sobre o Ciclo do Manganês (ICOMI), a criação do Território Federal do Amapá, limites fronteiriços e aspectos demográficos atuais. Não aceite alucinações.
+Sua tarefa é gerar questões inéditas e de alto nível técnico no formato ${promptType} para a banca examinadora: "${editalInfo.banca || 'Padrão Profissional (FGV/FCC/Cespe)'}".
 
-DISTRIBUIÇÃO SOLICITADA:
+─── INSTRUÇÕES DE ESTILO ───
+Estilo da banca para esta geração: ${chooseExample.style}
+
+Para referência, SIGA EXATAMENTE O NÍVEL DE DIFICULDADE E ESTRUTURA DESTE EXEMPLO REAL:
+Assunto: ${chooseExample.example.subject}
+Tópico: ${chooseExample.example.topic}
+Enunciado: "${chooseExample.example.text}"
+Alternativas: ${JSON.stringify(chooseExample.example.options)}
+Gabarito: ${chooseExample.example.correctIndex} (${chooseExample.example.options[chooseExample.example.correctIndex]})
+Explicação: ${chooseExample.example.explanation}
+
+─── REGRAS CRÍTICAS ───
+1. LEGISLAÇÃO: Para Direito, use a Constituição Federal vigente, leis secas e códigos. NUNCA invente leis ou artigos.
+2. JURISPRUDÊNCIA: Use entendimentos PACIFICADOS do STF (súmulas vinculantes, repercussão geral) e STJ (súmulas, recursos repetitivos). Prefira jurisprudência atual (2023-2026).
+3. PEGADINHAS REAIS: Modele as questões a partir de erros clássicos de concurseiros:
+   - Confundir prazos (ex: 5 vs 10 dias, decadência vs prescrição)
+   - Trocar sujeitos (ex: competência da União vs Estado vs Município)
+   - Esquecer exceções (ex: "salvo disposição em contrário")
+   - Inverter o ônus da prova
+   - Ignorar a hierarquia das normas
+4. RIGOR TÉCNICO: Cada questão deve ter UMA resposta inequívoca. Evite enunciados vagos ou dupla interpretação.
+5. CONHECIMENTOS REGIONAIS (AMAPÁ): Para temas de História e Geografia do Amapá, baseie-se estritamente em:
+   - Ciclo do Manganês (ICOMI): exploração na Serra do Navio (1957-1997)
+   - Criação do Território Federal do Amapá (1943) e elevação a Estado (1988)
+   - Limites: Oiapoque (N), Pará (S e O), Oceano Atlântico (L)
+   - População: ~900 mil hab. (IBGE 2024), Macapá como capital
+   NÃO alucine dados demográficos ou históricos.
+6. ATUALIZAÇÃO: Priorize a legislação e jurisprudência mais recentes. Se houver divergência doutrinária, indique o entendimento majoritário.
+
+─── DISTRIBUIÇÃO SOLICITADA ───
 ${JSON.stringify(subjectsWithTopics, null, 2)}
 
-RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA DO JSON) NO FORMATO:
+─── FORMATO DE SAÍDA ───
+RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO (SEM TEXTO ADICIONAL FORA DO JSON, SEM MARKDOWN, SEM EXPLICAÇÕES ANTES OU DEPOIS):
 [
   {
-    "subject": "Nome da disciplina",
-    "topic": "Tópico específico (ex: Art. 5º da CF)",
-    "text": "Enunciado completo da questão",
-    "options": ["Opção A", "Opção B", ...],
+    "subject": "Nome exato da disciplina (igual ao informado acima)",
+    "topic": "Tópico específico com detalhe (ex: Art. 5º, XII - Inviolabilidade do sigilo de dados)",
+    "text": "Enunciado completo no estilo da banca alvo",
+    "options": ["Alternativa A", "Alternativa B", "Alternativa C", "Alternativa D"${isCespe ? '' : `, "Alternativa E"`}],
     "correctIndex": 0,
-    "explanation": "Explicação técnica citando lei ou doutrina"
+    "explanation": "Explicação técnica CITANDO o dispositivo legal, súmula ou entendimento jurisprudencial aplicável. Seja didático."
   }
 ]`;
 
-      const responseText = await callGeminiWithFallback(prompt);
+      const responseText = await callGemini(prompt);
       
       if (responseText) {
         const jsonMatch = responseText.match(/\[[\s\S]*\]/);
@@ -341,14 +398,8 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON (SEM TEXTO ADICIONAL OU EXPLICAÇÕES FORA 
     if (followingIds.length === 0) return;
     setIsSharingLoading(true);
     try {
-      const q = query(collection(db, 'profiles'), where('uid', 'in', followingIds));
-      const snap = await getDocs(q);
-      const profiles = snap.docs.map(doc => ({
-        uid: doc.id,
-        name: doc.data().name,
-        username: doc.data().username
-      }));
-      setFriends(profiles);
+      const profiles = await fetchDocsByIds<{ uid: string; name: string; username: string }>('profiles', 'uid', followingIds);
+      setFriends(profiles.map(p => ({ uid: p.uid, name: p.name, username: p.username })));
     } catch (err) {
       console.error('Erro ao buscar amigos para compartilhar:', err);
     } finally {

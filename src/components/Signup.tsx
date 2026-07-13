@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Mail, Lock, User, UserPlus, CheckCircle2, BookOpen, GraduationCap, RefreshCw, ArrowLeft } from 'lucide-react';
-import { cn } from '../lib/utils';
-import { auth } from '../lib/firebase';
+import { cn } from '@/lib/utils';
+import { auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { useStore } from '../store';
+import { useStore } from '@/store';
 
 interface SignupProps {
   onSignup: () => void;

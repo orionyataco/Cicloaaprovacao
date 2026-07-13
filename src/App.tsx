@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Timer } from './components/Timer';
 import { Dashboard } from './components/Dashboard';
 import { Edital } from './components/Edital';

@@ -3,7 +3,7 @@ import { useStore } from '@/store';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, getDocs, limit, orderBy, addDoc } from 'firebase/firestore';
 import { Search, UserPlus, UserMinus, Trophy, Target, Clock, BookOpen, ChevronRight, UserCircle, X, LayoutDashboard, Target as TargetIcon, Globe, Plus, Calendar } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, fetchDocsByIds } from '@/lib/utils';
 import { startOfWeek, parseISO } from 'date-fns';
 
 interface PublicProfile {
@@ -72,9 +72,7 @@ export function Rankings() {
       }
       setIsLoadingFriends(true);
       try {
-        const q = query(collection(db, 'profiles'), where('uid', 'in', followingIds));
-        const snap = await getDocs(q);
-        const profiles = snap.docs.map(doc => doc.data() as PublicProfile);
+        const profiles = await fetchDocsByIds<PublicProfile>('profiles', 'uid', followingIds);
         setFriendsProfiles(profiles);
       } catch (err) {
         console.error('Erro ao buscar amigos:', err);
@@ -95,9 +93,7 @@ export function Rankings() {
       
       setIsLoadingWeekly(true);
       try {
-        const q = query(collection(db, 'profiles'), where('uid', 'in', weeklyRankingFriendIds));
-        const snap = await getDocs(q);
-        const profiles = snap.docs.map(doc => doc.data() as any);
+        const profiles = await fetchDocsByIds<any>('profiles', 'uid', weeklyRankingFriendIds);
         setWeeklyProfiles(profiles);
       } catch (err) {
         console.error('Erro ao buscar ranking semanal:', err);

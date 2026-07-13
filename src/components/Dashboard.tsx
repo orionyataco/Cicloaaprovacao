@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { useStore } from '@/store';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { format, parseISO, isValid } from 'date-fns';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { format, parseISO, isValid, startOfDay, subDays, differenceInCalendarDays, isAfter } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Target, CheckCircle2, Clock, BookOpen } from 'lucide-react';
+import { Target, CheckCircle2, Clock, BookOpen, Flame, Zap } from 'lucide-react';
 
 export function Dashboard() {
   const { subjects, topics, questionLogs, simulados, studySessions } = useStore();
@@ -52,6 +52,53 @@ export function Dashboard() {
       };
     });
 
+    // ── Consistency streak ──
+    const dayMap = new Map<string, number>();
+    studySessions.forEach(s => {
+      const day = format(parseISO(s.date), 'yyyy-MM-dd');
+      dayMap.set(day, (dayMap.get(day) || 0) + s.durationSeconds);
+    });
+
+    const today = startOfDay(new Date());
+    let currentStreak = 0;
+    let cursor = today;
+    while (dayMap.has(format(cursor, 'yyyy-MM-dd'))) {
+      currentStreak++;
+      cursor = subDays(cursor, 1);
+    }
+    // Se hoje não tem registro, verifica a partir de ontem
+    if (currentStreak === 0) {
+      cursor = subDays(today, 1);
+      while (dayMap.has(format(cursor, 'yyyy-MM-dd'))) {
+        currentStreak++;
+        cursor = subDays(cursor, 1);
+      }
+    }
+
+    let longestStreak = 0;
+    let tempStreak = 0;
+    const sortedDays = Array.from(dayMap.keys()).sort();
+    for (let i = 0; i < sortedDays.length; i++) {
+      if (i === 0) { tempStreak = 1; continue; }
+      const diff = differenceInCalendarDays(parseISO(sortedDays[i]), parseISO(sortedDays[i - 1]));
+      if (diff === 1) tempStreak++;
+      else tempStreak = 1;
+      if (tempStreak > longestStreak) longestStreak = tempStreak;
+    }
+
+    // Grid dos últimos 70 dias (10 semanas)
+    const streakGrid: { date: Date; minutes: number; dayLabel: string }[] = [];
+    for (let i = 69; i >= 0; i--) {
+      const d = subDays(today, i);
+      const key = format(d, 'yyyy-MM-dd');
+      const seconds = dayMap.get(key) || 0;
+      streakGrid.push({
+        date: d,
+        minutes: Math.round(seconds / 60),
+        dayLabel: format(d, 'EEE', { locale: ptBR }).slice(0, 1),
+      });
+    }
+
     const simuladosEvolution = simulados.filter(s => s.category === 'simulado').map(s => {
       const dateObj = parseISO(s.date);
       return {
@@ -70,10 +117,10 @@ export function Dashboard() {
       };
     });
 
-    return { totalQuestionsAll, totalCorrectAll, hours, minutes, totalTopics, completedTopicsAll, subjectPerformance, simuladosEvolution, questoesEvolution };
+    return { totalQuestionsAll, totalCorrectAll, hours, minutes, totalTopics, completedTopicsAll, subjectPerformance, simuladosEvolution, questoesEvolution, currentStreak, longestStreak, streakGrid };
   }, [subjects, topics, questionLogs, simulados, studySessions]);
 
-  const { totalQuestionsAll, totalCorrectAll, hours, minutes, totalTopics, completedTopicsAll, subjectPerformance, simuladosEvolution, questoesEvolution } = stats;
+  const { totalQuestionsAll, totalCorrectAll, hours, minutes, totalTopics, completedTopicsAll, subjectPerformance, simuladosEvolution, questoesEvolution, currentStreak, longestStreak, streakGrid } = stats;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -121,6 +168,71 @@ export function Dashboard() {
             <p className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-widest">Teoria Concluída</p>
             <p className="text-xl sm:text-2xl font-bold text-zinc-100">{completedTopicsAll}/{totalTopics}</p>
           </div>
+        </div>
+      </div>
+
+      {/* Consistency Streak */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <h2 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
+            <Flame className="w-5 h-5 text-orange-400" />
+            Consistência de Estudos
+          </h2>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <Flame className="w-5 h-5 text-orange-500" />
+              <div>
+                <p className="text-2xl font-black text-orange-400 tabular-nums">{currentStreak}</p>
+                <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Dias Seguidos</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-500" />
+              <div>
+                <p className="text-2xl font-black text-amber-400 tabular-nums">{longestStreak}</p>
+                <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Maior Sequência</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Grade de consistência (GitHub-style) */}
+        <div className="overflow-x-auto pb-2">
+          <div className="grid grid-rows-7 grid-flow-col gap-[3px] w-fit">
+            {Array.from({ length: 7 }, (_, row) =>
+              Array.from({ length: 10 }, (_, col) => {
+                const idx = col * 7 + row;
+                const day = streakGrid[idx];
+                if (!day) return <div key={`${col}-${row}`} className="w-3 h-3 rounded-sm bg-zinc-950 border border-zinc-800/30" />;
+                
+                let intensity = 'bg-zinc-950 border border-zinc-800/20';
+                if (day.minutes > 0) {
+                  if (day.minutes < 30) intensity = 'bg-emerald-900/40 border border-emerald-800/30';
+                  else if (day.minutes < 60) intensity = 'bg-emerald-700/50 border border-emerald-600/30';
+                  else if (day.minutes < 120) intensity = 'bg-emerald-600/60 border border-emerald-500/40';
+                  else intensity = 'bg-emerald-500/80 border border-emerald-400/50';
+                }
+
+                return (
+                  <div
+                    key={`${col}-${row}`}
+                    className={`w-3 h-3 rounded-sm ${intensity}`}
+                    title={`${format(day.date, 'dd/MM/yyyy', { locale: ptBR })}: ${day.minutes > 0 ? `${day.minutes}min` : 'Descanso'}`}
+                  />
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 mt-3 text-[10px] text-zinc-600">
+          <span>Menos</span>
+          <div className="w-3 h-3 rounded-sm bg-zinc-950 border border-zinc-800/20" />
+          <div className="w-3 h-3 rounded-sm bg-emerald-900/40 border border-emerald-800/30" />
+          <div className="w-3 h-3 rounded-sm bg-emerald-700/50 border border-emerald-600/30" />
+          <div className="w-3 h-3 rounded-sm bg-emerald-600/60 border border-emerald-500/40" />
+          <div className="w-3 h-3 rounded-sm bg-emerald-500/80 border border-emerald-400/50" />
+          <span>Mais</span>
         </div>
       </div>
 

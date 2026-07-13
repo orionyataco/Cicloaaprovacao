@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { addDays, isBefore, startOfDay } from 'date-fns';
+import { addDays } from 'date-fns';
 
 export type TopicStatus = 'NOT_READ' | 'THEORY_DONE' | 'SUMMARY_DONE' | 'REVIEWED';
 export type ErrorReason = 'ATTENTION' | 'UNSEEN' | 'TRICK' | 'NONE';
