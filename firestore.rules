@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Funções auxiliares ───
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    // ─── Dados privados do usuário ───
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // ─── Perfil público (rankings, busca de amigos) ───
+    match /profiles/{uid} {
+      // Qualquer autenticado pode ler (busca, ranking)
+      allow read: if isAuth();
+      // Apenas o dono pode escrever
+      allow write: if isOwner(uid);
+      // Índices necessários:
+      //  - uid (para queries IN)
+      //  - username (para busca por @usuario)
+      //  - searchName (para busca por nome)
+      //  - stats.totalQuestions (para ranking global)
+    }
+
+    // ─── Questões compartilhadas entre amigos ───
+    match /shared_questions/{id} {
+      // O destinatário pode ler; o remetente pode criar; ambos podem excluir
+      allow read: if isAuth() && resource.data.toUid == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.fromUid == request.auth.uid;
+      allow delete: if isAuth() && (
+        resource.data.fromUid == request.auth.uid ||
+        resource.data.toUid == request.auth.uid
+      );
+      allow update: if isAuth() && resource.data.toUid == request.auth.uid;
+    }
+
+    // ─── Notificações ───
+    match /notifications/{id} {
+      // O destinatário pode ler e gerenciar
+      allow read: if isAuth() && resource.data.toUid == request.auth.uid;
+      // Qualquer autenticado pode criar notificação para outro usuário
+      allow create: if isAuth();
+      // O destinatário pode marcar como lida ou excluir
+      allow write: if isAuth() && resource.data.toUid == request.auth.uid;
+      // Índice necessário: toUid (para o listener em tempo real)
+    }
+
+    // ─── Questões públicas (compartilhamento externo) ───
+    match /public_questions/{id} {
+      // Qualquer pessoa pode ler (inclusive não autenticado)
+      allow read: if true;
+      // Apenas o criador pode criar o documento
+      allow create: if isAuth() && request.resource.data.fromUid == request.auth.uid;
+      // Qualquer um pode incrementar views/solves (update apenas campos específicos)
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['views', 'solves']);
+      // O criador pode excluir
+      allow delete: if isAuth() && resource.data.fromUid == request.auth.uid;
+    }
+  }
+}
