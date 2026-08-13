@@ -609,7 +609,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
       {/* Bulk Add Modal */}
       {isBulkAddModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-emerald-500/10 rounded-lg">
@@ -628,7 +628,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-xl">
                 <p className="text-xs text-emerald-400 font-medium">Instruções:</p>
                 <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
@@ -667,7 +667,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
       {/* YouTube Suggestions Modal */}
       {isYoutubeModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-red-500/10 rounded-lg">
@@ -683,7 +683,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto flex-1">
               {isSearchingYoutube ? (
                 <div className="flex flex-col items-center justify-center py-12 space-y-4">
                   <Loader2 className="w-10 h-10 text-red-500 animate-spin" />
@@ -833,7 +833,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
       {/* Templates Modal */}
       {isTemplatesModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-emerald-500/10 rounded-lg">
@@ -852,7 +852,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
               </button>
             </div>
 
-            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
               <div className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-xl">
                 <p className="text-xs text-emerald-400 font-medium">Escolha seu concurso:</p>
                 <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">

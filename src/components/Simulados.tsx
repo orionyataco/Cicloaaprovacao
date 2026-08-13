@@ -803,9 +803,9 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO (SEM TEXTO ADICIONAL FORA DO JSON, 
           </button>
         </header>
 
-        <div className="space-y-12">
+        <div className="space-y-6 md:space-y-12">
           {activeExam.map((q, qIndex) => (
-            <div key={qIndex} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 md:p-8">
+            <div key={qIndex} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 md:p-8">
               <div className="flex items-center gap-3 mb-4">
                 <span className="bg-zinc-800 text-zinc-300 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
                   Questão {qIndex + 1}
@@ -905,11 +905,11 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO (SEM TEXTO ADICIONAL FORA DO JSON, 
         </div>
 
         {!examFinished && (
-          <div className="sticky bottom-8 flex justify-end">
+          <div className="sticky bottom-4 md:bottom-8 flex justify-end pb-2">
             <button
               onClick={finishExam}
               disabled={Object.keys(userAnswers).length < activeExam.length}
-              className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white px-8 py-4 rounded-2xl font-bold text-lg shadow-2xl transition-all flex items-center gap-3"
+              className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white px-5 py-3 md:px-8 md:py-4 rounded-2xl font-bold text-base md:text-lg shadow-2xl transition-all flex items-center gap-3"
             >
               Finalizar Simulado <ChevronRight className="w-6 h-6" />
             </button>
@@ -955,7 +955,7 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO (SEM TEXTO ADICIONAL FORA DO JSON, 
       </header>
 
       {/* Abas de Navegação */}
-      <div className="flex border-b border-zinc-800">
+      <div className="flex overflow-x-auto border-b border-zinc-800 no-scrollbar">
         <button
           onClick={() => setActiveTab('simulados')}
           className={cn(

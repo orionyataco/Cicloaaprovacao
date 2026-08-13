@@ -31,3 +31,34 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #3f3f46; /* zinc-700 */
 }
+
+/* Scrollbar customizado para elementos com custom-scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 4px;
+}
+
+/* Ocultar scrollbar mas manter funcionalidade (ex: abas de navegação) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Melhorias de toque para dispositivos móveis */
+@media (hover: none) and (pointer: coarse) {
+  button, a, [role="button"] {
+    min-height: 44px;
+  }
+}
+
+/* Suporte a safe-area (notch/barra home do iOS) */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+}

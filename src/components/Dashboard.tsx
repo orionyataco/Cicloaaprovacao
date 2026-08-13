@@ -274,7 +274,7 @@ export function Dashboard() {
 
       {/* Evolução Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col min-w-0 overflow-hidden">
           <h2 className="text-lg font-semibold text-zinc-100 mb-4">Evolução em Simulados</h2>
           <div className="flex-1 h-[250px] w-full mt-2">
             {simuladosEvolution.length > 0 ? (
@@ -298,7 +298,7 @@ export function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col min-w-0 overflow-hidden">
           <h2 className="text-lg font-semibold text-zinc-100 mb-4">Evolução por Assunto (Questões)</h2>
           <div className="flex-1 h-[250px] w-full mt-2">
             {questoesEvolution.length > 0 ? (

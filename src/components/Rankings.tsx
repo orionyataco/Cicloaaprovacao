@@ -313,7 +313,7 @@ export function Rankings() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-zinc-100">Ligas e Rankings</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-zinc-100">Ligas e Rankings</h1>
           <p className="text-zinc-400 mt-1">Siga amigos e compare seu desempenho em tempo real.</p>
         </div>
         
@@ -341,7 +341,7 @@ export function Rankings() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Search and Friends */}
-        <div className="space-y-6">
+        <div className="space-y-6 lg:order-first order-last">
           <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
             <h2 className="text-lg font-bold text-zinc-100 mb-4 flex items-center gap-2">
               <Search className="w-5 h-5 text-blue-400" />
@@ -504,7 +504,7 @@ export function Rankings() {
         </div>
 
         {/* Right Column: Rankings */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6 order-first lg:order-none">
           {activeTab === 'social' ? (
             <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-xl">
               <div className="p-6 border-b border-zinc-800">
