@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { auth, db } from '../lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, onSnapshot, limit, deleteDoc } from 'firebase/firestore';
 import { useStore } from '../store';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, onSnapshot, limit } from 'firebase/firestore';
 import { startOfWeek, format, parseISO } from 'date-fns';
 
 export function useFirebaseSync() {
@@ -22,6 +21,10 @@ export function useFirebaseSync() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        if (useStore.getState().isDemoMode) {
+          console.log('[Firebase] Usuário logou de verdade. Desativando modo demo...');
+          useStore.setState({ isDemoMode: false, uid: user.uid });
+        }
         const currentStoreUid = useStore.getState().uid;
         if (currentStoreUid && currentStoreUid !== user.uid) {
           console.log('[Firebase] 🆔 Mudança de usuário detectada. Resetando estado local...');
@@ -85,6 +88,7 @@ export function useFirebaseSync() {
                 currentCycleIndex: remoteData.currentCycleIndex ?? 0,
                 activeTopicId: remoteData.activeTopicId ?? null,
                 notifications: remoteData.notifications ?? [],
+                wrongQuestions: remoteData.wrongQuestions ?? [],
                 lastUpdate: remoteData.lastUpdate ?? null,
                 isAuthenticated: true,
                 uid: user.uid
@@ -109,13 +113,21 @@ export function useFirebaseSync() {
           useStore.getState().setUid(user.uid);
           useStore.getState().login();
         } finally {
+          // Atraso síncrono reduzido para o mínimo absoluto (0ms)
           setTimeout(() => {
             isHydrating.current = false;
             setHasHydrated(true);
             useStore.setState({ isHydrated: true });
-          }, 300);
+          }, 0);
         }
       } else {
+        // Se estiver no modo demo, não faz nada, pois a pessoa está testando offline
+        if (useStore.getState().isDemoMode) {
+          console.log('[Firebase] Modo demo ativo. Ignorando evento de deslogar do Firebase.');
+          setHasHydrated(true);
+          useStore.setState({ isHydrated: true });
+          return;
+        }
         // Usuário deslogou
         isHydrating.current = false;
         setHasHydrated(false);
@@ -152,9 +164,14 @@ export function useFirebaseSync() {
                 title: notif.title,
                 message: notif.message,
                 fromUid: notif.fromUid,
-                link: notif.link
+                link: notif.link,
+                date: notif.date
               });
             }
+            // Deleta o documento inbox para não duplicar no futuro
+            deleteDoc(doc(db, 'notifications', notif.id)).catch((err) => {
+              console.warn('[Firebase] Não foi possível apagar a notificação temporária do inbox:', err.message);
+            });
           }
         });
       }, (error) => {
@@ -190,7 +207,7 @@ export function useFirebaseSync() {
     // 2. A hidratação inicial já ocorreu (evita sobrescrever o banco com dados vazios ao iniciar)
     // 3. O usuário está autenticado no Firebase
     const user = auth.currentUser;
-    if (isHydrating.current || !hasHydrated || !store.isAuthenticated || !user) {
+    if (isHydrating.current || !hasHydrated || !store.isAuthenticated || store.isDemoMode || !user) {
       return;
     }
 
@@ -330,6 +347,7 @@ export function useFirebaseSync() {
     store.customRankingStartDate,
     store.customRankingEndDate,
     store.notifications,
+    store.wrongQuestions,
     store.isAuthenticated,
     hasHydrated
   ]);

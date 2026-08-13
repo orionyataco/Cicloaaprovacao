@@ -41,7 +41,13 @@ export function Rankings() {
     updateEditalInfo,
     customRankingStartDate,
     customRankingEndDate,
-    setCustomRankingDates
+    setCustomRankingDates,
+    subjects,
+    topics,
+    questionLogs,
+    simulados,
+    studySessions,
+    editalInfo
   } = useStore();
   
   const [activeTab, setActiveTab] = useState<'social' | 'weekly'>('social');
@@ -218,22 +224,22 @@ export function Rankings() {
     bio: userProfile.bio,
     avatar: userProfile.avatar,
     editalInfo: {
-      carreira: useStore.getState().editalInfo.carreira,
-      cargo: useStore.getState().editalInfo.cargo,
-      banca: useStore.getState().editalInfo.banca,
+      carreira: editalInfo.carreira,
+      cargo: editalInfo.cargo,
+      banca: editalInfo.banca,
     },
-    editalStructure: useStore.getState().subjects.map(s => ({
+    editalStructure: subjects.map(s => ({
       subject: s.name,
-      topics: useStore.getState().topics.filter(t => t.subjectId === s.id).map(t => t.name)
+      topics: topics.filter(t => t.subjectId === s.id).map(t => t.name)
     })),
     stats: {
-      totalQuestions: useStore.getState().questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0) + 
-                     useStore.getState().simulados.filter(s => s.type === 'manual' || s.type === 'shared').reduce((acc, curr) => acc + curr.total, 0),
-      totalCorrect: useStore.getState().questionLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0) +
-                   useStore.getState().simulados.filter(s => s.type === 'manual' || s.type === 'shared').reduce((acc, curr) => acc + curr.score, 0),
-      totalStudySeconds: useStore.getState().studySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0),
-      completedTheories: useStore.getState().topics.filter(t => t.status !== 'NOT_READ').length,
-      totalTopics: useStore.getState().topics.length
+      totalQuestions: questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0) + 
+                     simulados.filter(s => s.type === 'manual' || s.type === 'shared').reduce((acc, curr) => acc + curr.total, 0),
+      totalCorrect: questionLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0) +
+                   simulados.filter(s => s.type === 'manual' || s.type === 'shared').reduce((acc, curr) => acc + curr.score, 0),
+      totalStudySeconds: studySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0),
+      completedTheories: topics.filter(t => t.status !== 'NOT_READ').length,
+      totalTopics: topics.length
     }
   };
 
@@ -269,15 +275,15 @@ export function Rankings() {
          }
          return acc;
        }, 0);
-    };
+     };
 
     // Add current user to weekly as well
     const myWeekly: any = {
       ...myPublicProfile,
       weeklyStats: {
-        studySeconds: sumStat(useStore.getState().studySessions, 'date', 'durationSeconds'),
-        totalQuestions: sumStat(useStore.getState().questionLogs, 'date', 'totalQuestions') + sumStat(useStore.getState().simulados.filter(s => s.type === 'manual' || s.type === 'shared'), 'date', 'total'),
-        correctAnswers: sumStat(useStore.getState().questionLogs, 'date', 'correctAnswers') + sumStat(useStore.getState().simulados.filter(s => s.type === 'manual' || s.type === 'shared'), 'date', 'score')
+        studySeconds: sumStat(studySessions, 'date', 'durationSeconds'),
+        totalQuestions: sumStat(questionLogs, 'date', 'totalQuestions') + sumStat(simulados.filter(s => s.type === 'manual' || s.type === 'shared'), 'date', 'total'),
+        correctAnswers: sumStat(questionLogs, 'date', 'correctAnswers') + sumStat(simulados.filter(s => s.type === 'manual' || s.type === 'shared'), 'date', 'score')
       }
     };
 

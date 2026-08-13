@@ -10,9 +10,32 @@ import { callGemini } from '@/lib/gemini';
 import { GeneratedQuestion, SharedQuestion } from '@/store';
 
 // Removido interface GeneratedQuestion local pois foi movida para o store.ts
-
 export function Simulados() {
-  const { simulados, addSimulado, deleteSimulado, subjects, topics, editalInfo, addFlashcard, addQuestionLog, logStudySession, autoGenerateTopicId, setAutoGenerateTopicId, autoGenerateSubjectId, setAutoGenerateSubjectId, autoGenerateCount, followingIds, sharedQuestions, userProfile } = useStore();
+  const { 
+    simulados, 
+    addSimulado, 
+    deleteSimulado, 
+    subjects, 
+    topics, 
+    editalInfo, 
+    addFlashcard, 
+    addQuestionLog, 
+    logStudySession, 
+    autoGenerateTopicId, 
+    setAutoGenerateTopicId, 
+    autoGenerateSubjectId, 
+    setAutoGenerateSubjectId, 
+    autoGenerateCount, 
+    followingIds, 
+    sharedQuestions, 
+    userProfile,
+    wrongQuestions,
+    addWrongQuestion,
+    deleteWrongQuestion,
+    updateWrongQuestionErrorReason,
+    updateWrongQuestionAiAnalysis
+  } = useStore();
+  
   const [isAdding, setIsAdding] = useState(false);
   const [name, setName] = useState('');
   const [score, setScore] = useState('');
@@ -21,6 +44,49 @@ export function Simulados() {
   const [convertedToFlashcard, setConvertedToFlashcard] = useState<Record<number, boolean>>({});
   const [showSubjectBreakdown, setShowSubjectBreakdown] = useState(false);
   const [manualSubjectScores, setManualSubjectScores] = useState<Record<string, { correct: string, total: string }>>({});
+  const [activeTab, setActiveTab] = useState<'simulados' | 'erros'>('simulados');
+  const [analyzingId, setAnalyzingId] = useState<string|null>(null);
+
+  const handleAnalyzeError = async (wq: any) => {
+    setAnalyzingId(wq.id);
+    try {
+      const reasonLabel = {
+        NONE: 'Não informado',
+        ATTENTION: 'Falta de Atenção / Pegadinha',
+        LACK_OF_CONTENT: 'Falta de Conteúdo / Não estudei o tema',
+        INTERPRETATION: 'Erro de Interpretação do enunciado',
+        TIME: 'Tempo escasso / Pressão',
+        OTHER: 'Outro motivo'
+      }[wq.errorReason as 'NONE' | 'ATTENTION' | 'LACK_OF_CONTENT' | 'INTERPRETATION' | 'TIME' | 'OTHER'] || 'Não informado';
+
+      const prompt = `Você é um professor mentor de concursos especializado. O aluno errou a seguinte questão e precisa de um feedback cirúrgico.
+      
+Materia: ${wq.subject}
+Assunto: ${wq.topic}
+Questão: ${wq.text}
+Alternativas:
+${wq.options.map((opt: string, i: number) => `${String.fromCharCode(65 + i)}) ${opt}`).join('\n')}
+
+Gabarito Oficial: Alternativa ${String.fromCharCode(65 + wq.correctIndex)})
+Alternativa que o aluno marcou: ${wq.userAnswerIndex >= 0 ? `Alternativa ${String.fromCharCode(65 + wq.userAnswerIndex)})` : 'Não respondeu'}
+Causa alegada pelo aluno para o erro: ${reasonLabel}
+Explicação padrão da questão: ${wq.explanation}
+
+Por favor, faça um diagnóstico rápido do erro cometido pelo aluno. Explique de forma muito direta (máximo 4 parágrafos) por que a alternativa dele está errada e o gabarito oficial está correto, e dê uma dica prática de estudo personalizada (ex: foco na lei seca, resolução de questões semelhantes, ou revisão teórica específica) para que ele nunca mais erre esse tipo de questão. Escreva em português do Brasil com tom encorajador e profissional.`;
+
+      const response = await callGemini(prompt);
+      if (response) {
+        updateWrongQuestionAiAnalysis(wq.id, response);
+      } else {
+        alert('Não foi possível obter resposta da IA.');
+      }
+    } catch (err: any) {
+      console.error('Erro na análise de IA:', err);
+      alert(`Erro ao analisar: ${err.message}`);
+    } finally {
+      setAnalyzingId(null);
+    }
+  };
 
   // AI Generation State
   const [isGeneratingModalOpen, setIsGeneratingModalOpen] = useState(false);
@@ -285,6 +351,16 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO (SEM TEXTO ADICIONAL FORA DO JSON, 
       const isCorrect = userAnswers[index] === q.correctIndex;
       if (isCorrect) {
         correctCount++;
+      } else {
+        addWrongQuestion({
+          subject: q.subject,
+          topic: q.topic,
+          text: q.text,
+          options: q.options,
+          correctIndex: q.correctIndex,
+          userAnswerIndex: userAnswers[index] !== undefined ? userAnswers[index] : -1,
+          explanation: q.explanation
+        });
       }
 
       // Track by topic for question logs
@@ -853,71 +929,396 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO (SEM TEXTO ADICIONAL FORA DO JSON, 
           <p className="text-zinc-400 mt-1">Registre e acompanhe sua evolução em provas completas e questões avulsas.</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3">
-          {sharedQuestions.length > 0 && (
+          {sharedQuestions.length > 0 && activeTab === 'simulados' && (
              <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[10px] font-bold text-amber-500 uppercase tracking-widest animate-pulse">
                 <Users className="w-3 h-3" /> {sharedQuestions.length} novas questões compartilhadas
              </div>
           )}
-          <button 
-            onClick={() => setIsGeneratingModalOpen(true)}
-            className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-          >
-            <Brain className="w-4 h-4" /> Gerar com IA
-          </button>
-          <button 
-            onClick={() => setIsAdding(!isAdding)}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-          >
-            {isAdding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            {isAdding ? 'Cancelar' : 'Registrar Manual'}
-          </button>
+          {activeTab === 'simulados' && (
+            <>
+              <button 
+                onClick={() => setIsGeneratingModalOpen(true)}
+                className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <Brain className="w-4 h-4" /> Gerar com IA
+              </button>
+              <button 
+                onClick={() => setIsAdding(!isAdding)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                {isAdding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                {isAdding ? 'Cancelar' : 'Registrar Manual'}
+              </button>
+            </>
+          )}
         </div>
       </header>
 
-      {/* Shared Questions Section */}
-      {sharedQuestions.length > 0 && (
-        <section className="bg-amber-500/5 border border-amber-500/10 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-amber-500 flex items-center gap-2">
-              <Users className="w-5 h-5" /> Questões Compartilhadas com Você
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {sharedQuestions.map((shared) => (
-              <div key={shared.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-amber-500/30 transition-all group">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-400 font-bold">
-                       {shared.fromName.charAt(0)}
+      {/* Abas de Navegação */}
+      <div className="flex border-b border-zinc-800">
+        <button
+          onClick={() => setActiveTab('simulados')}
+          className={cn(
+            "pb-4 px-6 text-sm font-bold border-b-2 transition-all",
+            activeTab === 'simulados'
+              ? "border-emerald-500 text-zinc-100"
+              : "border-transparent text-zinc-500 hover:text-zinc-300"
+          )}
+        >
+          Histórico de Simulados
+        </button>
+        <button
+          onClick={() => setActiveTab('erros')}
+          className={cn(
+            "pb-4 px-6 text-sm font-bold border-b-2 transition-all flex items-center gap-2",
+            activeTab === 'erros'
+              ? "border-emerald-500 text-zinc-100"
+              : "border-transparent text-zinc-500 hover:text-zinc-300"
+          )}
+        >
+          Caderno de Erros Inteligente
+          {wrongQuestions.length > 0 && (
+            <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] px-1.5 py-0.5 rounded-full font-black">
+              {wrongQuestions.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'simulados' ? (
+        <>
+          {/* Shared Questions Section */}
+          {sharedQuestions.length > 0 && (
+            <section className="bg-amber-500/5 border border-amber-500/10 rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-amber-500 flex items-center gap-2">
+                  <Users className="w-5 h-5" /> Questões Compartilhadas com Você
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {sharedQuestions.map((shared) => (
+                  <div key={shared.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-amber-500/30 transition-all group">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-400 font-bold">
+                           {shared.fromName.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Enviado por {shared.fromName}</p>
+                          <p className="text-[8px] text-zinc-600">{format(parseISO(shared.date), "dd/MM 'às' HH:mm", { locale: ptBR })}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => deleteSharedQuestion(shared.id)} className="p-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Enviado por {shared.fromName}</p>
-                      <p className="text-[8px] text-zinc-600">{format(parseISO(shared.date), "dd/MM 'às' HH:mm", { locale: ptBR })}</p>
-                    </div>
+                    <p className="text-sm text-zinc-100 line-clamp-2 mb-4 italic">"{shared.question.text}"</p>
+                    <button 
+                      onClick={() => {
+                        setActiveExam([shared.question]);
+                        setActiveExamType('shared');
+                        setActiveSharedId(shared.id);
+                        setActiveSharedSenderUid(shared.fromUid);
+                        setUserAnswers({});
+                        setExamStartTime(Date.now());
+                        setActiveExamCategory('questoes');
+                      }}
+                      className="w-full py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 text-xs font-bold rounded-lg border border-amber-500/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Brain className="w-3 h-3" /> Resolver agora
+                    </button>
                   </div>
-                  <button onClick={() => deleteSharedQuestion(shared.id)} className="p-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Trash2 className="w-3 h-3" />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {isAdding && (
+            <form onSubmit={handleAdd} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4 animate-in slide-in-from-top-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1 uppercase tracking-wider">Nome da Prova</label>
+                  <input 
+                    type="text"
+                    required
+                    placeholder="Ex: Simulado TJ-SP 01"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1 uppercase tracking-wider">Acertos</label>
+                  <input 
+                    type="number"
+                    required
+                    min="0"
+                    value={score}
+                    onChange={(e) => setScore(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1 uppercase tracking-wider">Total de Questões</label>
+                  <input 
+                    type="number"
+                    required
+                    min="1"
+                    value={total}
+                    onChange={(e) => setTotal(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-zinc-800/50 p-4 rounded-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Brain className="w-4 h-4 text-blue-400" />
+                    <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-widest">Desempenho por Matéria (Opcional)</h3>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setShowSubjectBreakdown(!showSubjectBreakdown)}
+                    className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+                  >
+                    {showSubjectBreakdown ? 'Ocultar Detalhes' : 'Detalhar por Matéria'}
                   </button>
                 </div>
-                <p className="text-sm text-zinc-100 line-clamp-2 mb-4 italic">"{shared.question.text}"</p>
-                <button 
-                  onClick={() => {
-                    setActiveExam([shared.question]);
-                    setActiveExamType('shared');
-                    setActiveSharedId(shared.id);
-                    setActiveSharedSenderUid(shared.fromUid);
-                    setUserAnswers({});
-                    setExamStartTime(Date.now());
-                    setActiveExamCategory('questoes');
-                  }}
-                  className="w-full py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 text-xs font-bold rounded-lg border border-amber-500/20 transition-all flex items-center justify-center gap-2"
-                >
-                  <Brain className="w-3 h-3" /> Resolver agora
+                <p className="text-[10px] text-zinc-500">Ao detalhar por matéria, esses resultados serão refletidos nos seus Relatórios de Performance.</p>
+                
+                {showSubjectBreakdown && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+                    {subjects.map(subject => (
+                      <div key={subject.id} className="flex items-center justify-between gap-4 p-3 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subject.color }} />
+                          <span className="text-xs text-zinc-300 truncate">{subject.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="number" 
+                            placeholder="Hits"
+                            value={manualSubjectScores[subject.id]?.correct || ''}
+                            onChange={(e) => setManualSubjectScores(prev => ({ 
+                              ...prev, 
+                              [subject.id]: { ...prev[subject.id], correct: e.target.value, total: prev[subject.id]?.total || '10' } 
+                            }))}
+                            className="w-12 bg-zinc-950 border border-zinc-800 text-zinc-200 rounded px-2 py-1 text-xs text-center"
+                          />
+                          <span className="text-zinc-600">/</span>
+                          <input 
+                            type="number" 
+                            placeholder="Total"
+                            value={manualSubjectScores[subject.id]?.total || ''}
+                            onChange={(e) => setManualSubjectScores(prev => ({ 
+                              ...prev, 
+                              [subject.id]: { ...prev[subject.id], total: e.target.value } 
+                            }))}
+                            className="w-12 bg-zinc-950 border border-zinc-800 text-zinc-200 rounded px-2 py-1 text-xs text-center"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                  Salvar
                 </button>
               </div>
-            ))}
+            </form>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {simulados.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(simulado => {
+              const percentage = Math.round((simulado.score / simulado.total) * 100);
+              let colorClass = "text-zinc-400";
+              if (percentage >= 85) colorClass = "text-emerald-400";
+              else if (percentage >= 70) colorClass = "text-blue-400";
+              else colorClass = "text-red-400";
+
+              return (
+                <div key={simulado.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 hover:border-zinc-700 transition-colors">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-2">
+                      <Trophy className={`w-5 h-5 ${colorClass}`} />
+                      <h3 className="font-semibold text-zinc-100">{simulado.name}</h3>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-zinc-500">
+                        {format(parseISO(simulado.date), "dd MMM yyyy", { locale: ptBR })}
+                      </span>
+                      {confirmDelete === simulado.id ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-red-400 font-medium">Excluir?</span>
+                          <button onClick={() => { deleteSimulado(simulado.id); setConfirmDelete(null); }} className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Sim</button>
+                          <button onClick={() => setConfirmDelete(null)} className="text-xs bg-zinc-700 text-zinc-200 px-2 py-1 rounded hover:bg-zinc-600">Não</button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => setConfirmDelete(simulado.id)}
+                          className="text-zinc-500 hover:text-red-400 transition-colors p-1 rounded-md hover:bg-red-400/10"
+                          title="Excluir simulado"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-end gap-2">
+                    <span className={`text-4xl font-bold tracking-tighter ${colorClass}`}>
+                      {percentage}%
+                    </span>
+                    <span className="text-sm text-zinc-500 mb-1">
+                      ({simulado.score}/{simulado.total})
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            
+            {simulados.length === 0 && !isAdding && (
+              <div className="col-span-full text-center py-12 text-zinc-500 border border-dashed border-zinc-800 rounded-2xl">
+                Nenhum simulado registrado.
+              </div>
+            )}
           </div>
-        </section>
+        </>
+      ) : (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+            <div>
+              <h2 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                Caderno de Erros Inteligente
+              </h2>
+              <p className="text-xs text-zinc-400 mt-1">Aqui ficam registradas as questões que você errou nos simulados de IA. Revise-as e mapeie suas falhas.</p>
+            </div>
+            <div className="flex items-center gap-4 bg-zinc-950 px-4 py-2 rounded-xl border border-zinc-800">
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Total de Erros</span>
+              <span className="text-xl font-black text-red-400">{wrongQuestions.length}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6">
+            {wrongQuestions.map((wq) => (
+              <div key={wq.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 md:p-8 space-y-4 hover:border-zinc-700 transition-all">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-red-500/10 text-red-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border border-red-500/20">
+                      Questão Errada
+                    </span>
+                    <span className="text-sm text-emerald-400 font-bold">{wq.subject}</span>
+                    <span className="text-zinc-600">•</span>
+                    <span className="text-xs text-zinc-400 font-medium truncate max-w-[200px]" title={wq.topic}>{wq.topic}</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-500 font-mono">
+                      {format(parseISO(wq.date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                    </span>
+                    <button
+                      onClick={() => deleteWrongQuestion(wq.id)}
+                      className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                      title="Remover do caderno de erros"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-zinc-100 text-sm md:text-base leading-relaxed whitespace-pre-wrap">{wq.text}</p>
+
+                {/* Opções */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                  {wq.options.map((opt, oIdx) => {
+                    const isUserAnswer = wq.userAnswerIndex === oIdx;
+                    const isCorrectAnswer = wq.correctIndex === oIdx;
+                    
+                    let borderClass = "border-zinc-800 bg-zinc-950/20 text-zinc-400";
+                    let labelClass = "border-zinc-700 text-zinc-500";
+                    if (isCorrectAnswer) {
+                      borderClass = "border-emerald-500/30 bg-emerald-500/5 text-emerald-300";
+                      labelClass = "border-emerald-500 bg-emerald-500 text-zinc-950 font-bold";
+                    } else if (isUserAnswer) {
+                      borderClass = "border-red-500/30 bg-red-500/5 text-red-300";
+                      labelClass = "border-red-500 bg-red-500 text-zinc-950 font-bold";
+                    }
+
+                    return (
+                      <div key={oIdx} className={cn("p-3.5 rounded-xl border text-xs flex items-start gap-3", borderClass)}>
+                        <div className={cn("w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 text-[10px] mt-0.5", labelClass)}>
+                          {String.fromCharCode(65 + oIdx)}
+                        </div>
+                        <span>{opt}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Causa do Erro e Análise de IA */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4 border-t border-zinc-800/80">
+                  {/* Causa do Erro */}
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Causa do Erro</label>
+                    <select
+                      value={wq.errorReason}
+                      onChange={(e) => updateWrongQuestionErrorReason(wq.id, e.target.value as any)}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                    >
+                      <option value="NONE">Selecione o motivo...</option>
+                      <option value="ATTENTION">Falta de Atenção / Pegadinha</option>
+                      <option value="LACK_OF_CONTENT">Falta de Conteúdo / Não estudei</option>
+                      <option value="INTERPRETATION">Erro de Interpretação</option>
+                      <option value="TIME">Tempo esgotado / Pressão</option>
+                      <option value="OTHER">Outro motivo</option>
+                    </select>
+                  </div>
+
+                  {/* Análise de IA */}
+                  <div className="lg:col-span-2 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Análise do Professor IA</span>
+                      <button
+                        onClick={() => handleAnalyzeError(wq)}
+                        disabled={analyzingId === wq.id}
+                        className="bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5"
+                      >
+                        {analyzingId === wq.id ? (
+                          <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analisando...</>
+                        ) : (
+                          <><BrainCircuit className="w-3.5 h-3.5" /> {wq.aiAnalysis ? 'Reanalisar Erro' : 'Analisar meu Erro'}</>
+                        )}
+                      </button>
+                    </div>
+
+                    {wq.aiAnalysis ? (
+                      <div className="bg-blue-950/20 border border-blue-900/30 p-4 rounded-xl text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap animate-in fade-in slide-in-from-top-1">
+                        {wq.aiAnalysis}
+                      </div>
+                    ) : (
+                      <div className="bg-zinc-950/50 border border-zinc-800 p-4 rounded-xl text-xs text-zinc-500 italic text-center">
+                        Clique em "Analisar meu Erro" para receber um diagnóstico e dicas de estudo personalizadas.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {wrongQuestions.length === 0 && (
+              <div className="text-center py-16 text-zinc-500 border border-dashed border-zinc-800 rounded-3xl bg-zinc-900/20">
+                <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-emerald-500/30" />
+                <p className="font-medium text-sm">Nenhum erro registrado no seu caderno!</p>
+                <p className="text-xs text-zinc-600 mt-1">Continue resolvendo simulados de IA para mapear seus pontos de melhoria.</p>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Modal de Geração */}
@@ -983,160 +1384,6 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO (SEM TEXTO ADICIONAL FORA DO JSON, 
         </div>
       )}
 
-      {isAdding && (
-        <form onSubmit={handleAdd} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4 animate-in slide-in-from-top-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1 uppercase tracking-wider">Nome da Prova</label>
-              <input 
-                type="text"
-                required
-                placeholder="Ex: Simulado TJ-SP 01"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1 uppercase tracking-wider">Acertos</label>
-              <input 
-                type="number"
-                required
-                min="0"
-                value={score}
-                onChange={(e) => setScore(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1 uppercase tracking-wider">Total de Questões</label>
-              <input 
-                type="number"
-                required
-                min="1"
-                value={total}
-                onChange={(e) => setTotal(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="bg-zinc-800/50 p-4 rounded-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Brain className="w-4 h-4 text-blue-400" />
-                <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-widest">Desempenho por Matéria (Opcional)</h3>
-              </div>
-              <button 
-                type="button" 
-                onClick={() => setShowSubjectBreakdown(!showSubjectBreakdown)}
-                className="text-xs text-blue-400 hover:text-blue-300 font-medium"
-              >
-                {showSubjectBreakdown ? 'Ocultar Detalhes' : 'Detalhar por Matéria'}
-              </button>
-            </div>
-            <p className="text-[10px] text-zinc-500">Ao detalhar por matéria, esses resultados serão refletidos nos seus Relatórios de Performance.</p>
-            
-            {showSubjectBreakdown && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
-                {subjects.map(subject => (
-                  <div key={subject.id} className="flex items-center justify-between gap-4 p-3 bg-zinc-900/50 rounded-lg border border-zinc-800">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: subject.color }} />
-                      <span className="text-xs text-zinc-300 truncate">{subject.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input 
-                        type="number" 
-                        placeholder="Hits"
-                        value={manualSubjectScores[subject.id]?.correct || ''}
-                        onChange={(e) => setManualSubjectScores(prev => ({ 
-                          ...prev, 
-                          [subject.id]: { ...prev[subject.id], correct: e.target.value, total: prev[subject.id]?.total || '10' } 
-                        }))}
-                        className="w-12 bg-zinc-950 border border-zinc-800 text-zinc-200 rounded px-2 py-1 text-xs text-center"
-                      />
-                      <span className="text-zinc-600">/</span>
-                      <input 
-                        type="number" 
-                        placeholder="Total"
-                        value={manualSubjectScores[subject.id]?.total || ''}
-                        onChange={(e) => setManualSubjectScores(prev => ({ 
-                          ...prev, 
-                          [subject.id]: { ...prev[subject.id], total: e.target.value } 
-                        }))}
-                        className="w-12 bg-zinc-950 border border-zinc-800 text-zinc-200 rounded px-2 py-1 text-xs text-center"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-medium transition-colors">
-              Salvar
-            </button>
-          </div>
-        </form>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {simulados.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(simulado => {
-          const percentage = Math.round((simulado.score / simulado.total) * 100);
-          let colorClass = "text-zinc-400";
-          if (percentage >= 85) colorClass = "text-emerald-400";
-          else if (percentage >= 70) colorClass = "text-blue-400";
-          else colorClass = "text-red-400";
-
-          return (
-            <div key={simulado.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 hover:border-zinc-700 transition-colors">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-2">
-                  <Trophy className={`w-5 h-5 ${colorClass}`} />
-                  <h3 className="font-semibold text-zinc-100">{simulado.name}</h3>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-zinc-500">
-                    {format(parseISO(simulado.date), "dd MMM yyyy", { locale: ptBR })}
-                  </span>
-                  {confirmDelete === simulado.id ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-red-400 font-medium">Excluir?</span>
-                      <button onClick={() => { deleteSimulado(simulado.id); setConfirmDelete(null); }} className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Sim</button>
-                      <button onClick={() => setConfirmDelete(null)} className="text-xs bg-zinc-700 text-zinc-200 px-2 py-1 rounded hover:bg-zinc-600">Não</button>
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={() => setConfirmDelete(simulado.id)}
-                      className="text-zinc-500 hover:text-red-400 transition-colors p-1 rounded-md hover:bg-red-400/10"
-                      title="Excluir simulado"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex items-end gap-2">
-                <span className={`text-4xl font-bold tracking-tighter ${colorClass}`}>
-                  {percentage}%
-                </span>
-                <span className="text-sm text-zinc-500 mb-1">
-                  ({simulado.score}/{simulado.total})
-                </span>
-              </div>
-            </div>
-          );
-        })}
-        
-        {simulados.length === 0 && !isAdding && (
-          <div className="col-span-full text-center py-12 text-zinc-500 border border-dashed border-zinc-800 rounded-2xl">
-            Nenhum simulado registrado.
-          </div>
-        )}
-      </div>
       {/* Share Modal */}
       {shareModalNode}
     </div>

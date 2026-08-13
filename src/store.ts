@@ -71,6 +71,22 @@ export interface Simulado {
   category: 'simulado' | 'questoes';
 }
 
+export type WrongQuestionErrorReason = 'NONE' | 'ATTENTION' | 'LACK_OF_CONTENT' | 'INTERPRETATION' | 'TIME' | 'OTHER';
+
+export interface WrongQuestion {
+  id: string;
+  subject: string;
+  topic: string;
+  text: string;
+  options: string[];
+  correctIndex: number;
+  userAnswerIndex: number;
+  explanation: string;
+  date: string;
+  errorReason: WrongQuestionErrorReason;
+  aiAnalysis?: string;
+}
+
 export interface EditalInfo {
   carreira: string;
   cargo: string;
@@ -141,13 +157,16 @@ interface AppState {
   timerActiveTopicId: string | null;
   isAuthenticated: boolean;
   isHydrated: boolean;
+  isDemoMode: boolean;
   lastUpdate: string | null;
   notifications: AppNotification[];
   uid: string | null;
+  wrongQuestions: WrongQuestion[];
 
   // Actions
   setUid: (uid: string | null) => void;
   login: () => void;
+  startDemoMode: () => void;
   logout: () => void;
   addSubject: (subject: Omit<Subject, 'id'>) => void;
   addTopic: (topic: Omit<Topic, 'id' | 'lastStudiedAt' | 'nextReviewAt' | 'reviewCount'>) => void;
@@ -175,7 +194,7 @@ interface AppState {
   toggleWeeklyRankingFriend: (uid: string) => void;
   setCustomRankingDates: (start: string | null, end: string | null) => void;
   setSharedQuestions: (questions: SharedQuestion[]) => void;
-  addNotification: (notification: Omit<AppNotification, 'id' | 'date' | 'read'> & { id?: string }) => void;
+  addNotification: (notification: Omit<AppNotification, 'id' | 'date' | 'read'> & { id?: string; date?: string }) => void;
   markNotificationAsRead: (id: string) => void;
   deleteNotification: (id: string) => void;
   deleteAllNotifications: () => void;
@@ -183,6 +202,10 @@ interface AppState {
   resetAllData: () => void;
   startTimer: (topicId: string | null) => void;
   stopTimer: () => void;
+  addWrongQuestion: (question: Omit<WrongQuestion, 'id' | 'date' | 'errorReason'>) => void;
+  updateWrongQuestionErrorReason: (id: string, reason: WrongQuestionErrorReason) => void;
+  updateWrongQuestionAiAnalysis: (id: string, analysis: string) => void;
+  deleteWrongQuestion: (id: string) => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -196,6 +219,7 @@ export const useStore = create<AppState>()(
       flashcards: [],
       simulados: [],
       studySessions: [],
+      wrongQuestions: [],
       editalInfo: {
         carreira: '',
         cargo: '',
@@ -234,12 +258,14 @@ export const useStore = create<AppState>()(
       timerActiveTopicId: null,
       isAuthenticated: false,
       isHydrated: false,
+      isDemoMode: false,
       lastUpdate: null,
       notifications: [],
 
       setUid: (uid) => set({ uid }),
       login: () => set({ isAuthenticated: true }),
-      logout: () => set({ isAuthenticated: false, uid: null }),
+      startDemoMode: () => set({ isAuthenticated: true, isDemoMode: true, isHydrated: true, uid: 'demo-user' }),
+      logout: () => set({ isAuthenticated: false, isDemoMode: false, uid: null }),
 
       addSubject: (subject) => set((state) => ({ subjects: [...state.subjects, { ...subject, id: generateId() }] })),
       
@@ -483,7 +509,7 @@ export const useStore = create<AppState>()(
           { 
             ...notification, 
             id: notification.id || generateId(), 
-            date: new Date().toISOString(), 
+            date: (notification as any).date || new Date().toISOString(), 
             read: false 
           }, 
           ...state.notifications
@@ -502,6 +528,34 @@ export const useStore = create<AppState>()(
 
       setNotifications: (notifications) => set({ notifications }),
 
+      addWrongQuestion: (question) => set((state) => ({
+        wrongQuestions: [
+          ...state.wrongQuestions,
+          {
+            ...question,
+            id: generateId(),
+            date: new Date().toISOString(),
+            errorReason: 'NONE'
+          }
+        ]
+      })),
+
+      updateWrongQuestionErrorReason: (id, reason) => set((state) => ({
+        wrongQuestions: state.wrongQuestions.map(q => 
+          q.id === id ? { ...q, errorReason: reason } : q
+        )
+      })),
+
+      updateWrongQuestionAiAnalysis: (id, analysis) => set((state) => ({
+        wrongQuestions: state.wrongQuestions.map(q => 
+          q.id === id ? { ...q, aiAnalysis: analysis } : q
+        )
+      })),
+
+      deleteWrongQuestion: (id) => set((state) => ({
+        wrongQuestions: state.wrongQuestions.filter(q => q.id !== id)
+      })),
+
       resetAllData: () => set({
         subjects: [],
         topics: [],
@@ -509,6 +563,7 @@ export const useStore = create<AppState>()(
         flashcards: [],
         simulados: [],
         studySessions: [],
+        wrongQuestions: [],
         notifications: [],
         editalInfo: {
           carreira: '',
@@ -548,6 +603,7 @@ export const useStore = create<AppState>()(
         timerStartTime: null,
         timerActiveTopicId: null,
         isAuthenticated: false,
+        isDemoMode: false,
         isHydrated: false,
       }),
 
@@ -563,6 +619,10 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'engine-aprovacao-storage',
+      partialize: (state) => {
+        const { isHydrated, ...rest } = state;
+        return rest;
+      }
     }
   )
 );

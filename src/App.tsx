@@ -12,7 +12,7 @@ import { useStore } from './store';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 import { auth } from './lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle, LogOut, Users } from 'lucide-react';
+import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle, LogOut, Users, BookOpen, CheckCircle2, GraduationCap, RefreshCw } from 'lucide-react';
 import { Rankings } from './components/Rankings';
 import { cn } from './lib/utils';
 import { NotificationCenter } from './components/NotificationCenter';
@@ -21,10 +21,15 @@ type View = 'dashboard' | 'edital' | 'flashcards' | 'simulados' | 'account' | 'r
 
 export default function App() {
   useFirebaseSync();
-  const { userProfile, isAuthenticated, login, logout } = useStore();
+  const { userProfile, isAuthenticated, login, logout, isDemoMode } = useStore();
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
+
+  const handleGoToSignup = () => {
+    useStore.setState({ isAuthenticated: false });
+    setIsSignup(true);
+  };
 
   // Detecta parâmetro ?q= para questões compartilhadas publicamente
   const [sharedQuestionId, setSharedQuestionId] = useState<string | null>(() => {
@@ -89,13 +94,57 @@ export default function App() {
   // Se está autenticado, mas os dados ainda não foram carregados do Firebase
   if (!useStore.getState().isHydrated) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4">
-        <div className="relative w-24 h-24 mb-6">
-          <div className="absolute inset-0 border-4 border-emerald-500/20 rounded-full animate-spin border-t-emerald-500" />
-          <div className="absolute inset-2 border-4 border-blue-500/10 rounded-full animate-spin-slow border-t-blue-500" />
+      <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-4 selection:bg-emerald-500/30">
+        {/* Background Glow Decorations */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-600/10 rounded-full blur-[120px] -z-10 animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-[120px] -z-10 animate-pulse delay-700" />
+
+        <div className="w-full max-w-md">
+          {/* Logo Section */}
+          <div className="text-center mb-10 group">
+            <div className="relative inline-block mb-6">
+              <div className="relative w-32 h-32 mx-auto flex items-center justify-center transition-transform duration-500">
+                <div className="absolute inset-0 border-4 border-dashed border-emerald-500/20 rounded-full animate-[spin_10s_linear_infinite]" />
+                <div className="absolute inset-1 border-2 border-blue-500/20 rounded-full animate-[spin_15s_linear_infinite_reverse]" />
+                
+                <div className="z-10 flex flex-col items-center">
+                  <div className="relative">
+                    <BookOpen className="w-12 h-12 text-blue-400" />
+                    <CheckCircle2 className="absolute -top-1 -right-1 w-6 h-6 text-emerald-400 bg-[#09090b] rounded-full" />
+                  </div>
+                  <GraduationCap className="w-8 h-8 text-emerald-500 -mt-1" />
+                </div>
+                
+                <RefreshCw className="absolute inset-0 w-full h-full text-blue-500/10 animate-[spin_20s_linear_infinite]" />
+              </div>
+            </div>
+            
+            <h1 className="text-3xl font-bold tracking-tighter text-white">
+              CICLO <span className="bg-gradient-to-r from-emerald-400 to-blue-500 bg-clip-text text-transparent">A APROVAÇÃO</span>
+            </h1>
+            <p className="text-zinc-500 text-sm mt-2 uppercase tracking-[0.2em] font-medium">
+              Preparação que te leva lá
+            </p>
+          </div>
+
+          {/* Sync Card */}
+          <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 p-8 rounded-3xl shadow-2xl relative overflow-hidden text-center">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-blue-600" />
+            
+            <div className="relative z-10 py-4 flex flex-col items-center justify-center">
+              <div className="relative w-16 h-16 mb-6">
+                <div className="absolute inset-0 border-4 border-emerald-500/20 rounded-full animate-spin border-t-emerald-500" />
+                <div className="absolute inset-2 border-4 border-blue-500/10 rounded-full animate-spin-slow border-t-blue-500" />
+              </div>
+              <h2 className="text-lg font-bold text-zinc-100 animate-pulse">Sincronizando seus dados...</h2>
+              <p className="text-zinc-500 text-xs mt-2 font-medium">Isso levará apenas um segundo.</p>
+            </div>
+          </div>
+
+          <p className="text-center mt-12 text-zinc-600 text-xs">
+            &copy; {new Date().getFullYear()} Ciclo a Aprovação. Todos os direitos reservados.
+          </p>
         </div>
-        <h2 className="text-xl font-bold text-zinc-100 animate-pulse">Sincronizando seus dados...</h2>
-        <p className="text-zinc-500 text-sm mt-2">Isso levará apenas um segundo.</p>
       </div>
     );
   }
@@ -193,6 +242,19 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
+        {isDemoMode && (
+          <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border-b border-amber-500/30 px-4 py-2 text-center text-xs text-amber-300 font-medium flex items-center justify-center gap-2 shrink-0">
+            <span>✨ Você está no Modo de Demonstração (dados salvos localmente neste navegador).</span>
+            <button 
+              onClick={handleGoToSignup} 
+              className="underline hover:text-white font-bold transition-colors cursor-pointer"
+            >
+              Criar Conta Grátis
+            </button>
+            <span>para salvar na nuvem!</span>
+          </div>
+        )}
+
         {/* Topbar */}
         <header className="h-20 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between px-4 lg:px-8 sticky top-0 z-10">
           <div className="flex items-center gap-3 lg:gap-4">

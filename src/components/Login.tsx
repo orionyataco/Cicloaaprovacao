@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Mail, Lock, LogIn, CheckCircle2, BookOpen, GraduationCap, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { auth } from '@/lib/firebase';
+import { useStore } from '@/store';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
 interface LoginProps {
@@ -92,7 +93,7 @@ export function Login({ onLogin, onGotoSignup }: LoginProps) {
                 <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
                   Senha
                 </label>
-                <button type="button" className="text-[10px] text-zinc-500 hover:text-emerald-400 transition-colors uppercase tracking-widest font-bold">
+                <button type="button" onClick={() => alert("Função de recuperação de senha em breve.")} className="text-[10px] text-zinc-500 hover:text-emerald-400 transition-colors uppercase tracking-widest font-bold">
                   Esqueceu?
                 </button>
               </div>
@@ -128,6 +129,21 @@ export function Login({ onLogin, onGotoSignup }: LoginProps) {
                   <LogIn className="w-5 h-5 group-hover/btn:translate-x-1 transition-transform" />
                 </>
               )}
+            </button>
+
+            <div className="flex items-center justify-center gap-2 my-2 text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
+              <span>ou</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                useStore.getState().startDemoMode();
+                onLogin();
+              }}
+              className="w-full bg-zinc-800/60 hover:bg-zinc-800 text-zinc-200 font-bold py-4 rounded-2xl transition-all duration-300 border border-zinc-800 hover:border-zinc-700 active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <span>EXPERIMENTAR SEM CADASTRO</span>
             </button>
           </form>
           

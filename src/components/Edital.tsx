@@ -11,6 +11,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
   const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
   const [genCounts, setGenCounts] = useState<Record<string, number>>({});
   const [isBulkAddModalOpen, setIsBulkAddModalOpen] = useState(false);
+  const [isTemplatesModalOpen, setIsTemplatesModalOpen] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newTopicName, setNewTopicName] = useState('');
@@ -45,7 +46,7 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
     setTimeout(() => setToast(null), 4000);
   };
 
-  const getRandomColor = () => `#${Math.floor(Math.random()*16777215).toString(16)}`;
+  const getRandomColor = () => `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`;
 
   const callGeminiSafe = async <T = string>(prompt: string, isJson = false): Promise<T | null> => {
     try {
@@ -368,6 +369,13 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
                 </button>
               )
             )}
+
+            <button 
+              onClick={() => setIsTemplatesModalOpen(true)}
+              className="bg-zinc-900 hover:bg-zinc-850 text-zinc-100 border border-zinc-800 hover:border-zinc-700 px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-2"
+            >
+              <BookOpen className="w-4 h-4 text-emerald-400" /> <span>Editais Prontos</span>
+            </button>
 
             <button 
               onClick={() => setIsBulkAddModalOpen(true)}
@@ -822,6 +830,224 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
           </div>
         </div>
       )}
+      {/* Templates Modal */}
+      {isTemplatesModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-500/10 rounded-lg">
+                  <BookOpen className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-zinc-100">Biblioteca de Editais Prontos</h2>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Importe um edital estruturado</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsTemplatesModalOpen(false)}
+                className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              <div className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-xl">
+                <p className="text-xs text-emerald-400 font-medium">Escolha seu concurso:</p>
+                <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
+                  Importe a grade clássica com as matérias e assuntos principais. Você pode optar por substituir o edital atual ou apenas adicionar ao que já tem.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {PREDEFINED_EDITALS.map((template, idx) => (
+                  <div key={idx} className="bg-zinc-950/40 border border-zinc-800/40 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-emerald-500/20 transition-all group">
+                    <div className="space-y-1.5 flex-1">
+                      <h3 className="text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">{template.name}</h3>
+                      <p className="text-xs text-zinc-500 leading-relaxed">{template.description}</p>
+                      <div className="flex flex-wrap gap-1 pt-1.5">
+                        {template.subjects.map((sub, sIdx) => (
+                          <span key={sIdx} className="bg-zinc-900 text-[10px] text-zinc-400 px-2 py-0.5 rounded border border-zinc-800">{sub.subject}</span>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div className="flex sm:flex-col gap-2 shrink-0">
+                      <button
+                        onClick={() => {
+                          importEdital(template.subjects);
+                          setIsTemplatesModalOpen(false);
+                          showToast(`${template.name} mesclado com sucesso!`, 'success');
+                        }}
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-755 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98]"
+                      >
+                        Mesclar
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm('Atenção: Isso irá APAGAR todas as matérias e tópicos atuais do seu edital. Deseja continuar?')) {
+                            deleteAllSubjects();
+                            importEdital(template.subjects);
+                            setIsTemplatesModalOpen(false);
+                            showToast(`${template.name} importado com sucesso!`, 'success');
+                          }
+                        }}
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98] shadow-md shadow-emerald-950/10"
+                      >
+                        Substituir
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const PREDEFINED_EDITALS = [
+  {
+    name: "Polícia Federal (PF) - Agente",
+    description: "Excelente para a carreira policial federal. Foco em Informática/TI e Contabilidade.",
+    subjects: [
+      {
+        subject: "Português",
+        topics: ["Interpretação de texto", "Ortografia oficial", "Morfologia", "Sintaxe da oração e do período", "Pontuação", "Regência nominal e verbal", "Crase", "Reescrita de frases"]
+      },
+      {
+        subject: "Raciocínio Lógico",
+        topics: ["Estruturas lógicas", "Lógica de argumentação", "Diagramas lógicos", "Álgebra e combinatória", "Probabilidade"]
+      },
+      {
+        subject: "Informática (TI)",
+        topics: ["Banco de dados (SQL e NoSQL)", "Redes de computadores", "Segurança da informação", "Sistemas operacionais", "Programação Python e R", "Teoria Geral de Sistemas"]
+      },
+      {
+        subject: "Contabilidade Geral",
+        topics: ["Conceitos, objetivos e finalidades", "Patrimônio: Ativo, Passivo e PL", "Equação patrimonial", "Escrituração: lançamentos e contas", "Demonstrações Contábeis", "Balanço Patrimonial"]
+      },
+      {
+        subject: "Direito Administrativo",
+        topics: ["Estado, Governo e Administração Pública", "Atos Administrativos", "Agentes Públicos e Lei 8.112/90", "Poderes da Administração", "Licitações e Contratos (Lei 14.133/21)", "Responsabilidade Civil do Estado"]
+      },
+      {
+        subject: "Direito Constitucional",
+        topics: ["Direitos e Garantias Fundamentais", "Organização do Estado", "Poder Executivo", "Poder Legislativo", "Defesa do Estado e das Instituições Democráticas"]
+      },
+      {
+        subject: "Direito Penal",
+        topics: ["Aplicação da lei penal", "Teoria do crime (Fato típico, ilícito e culpável)", "Crimes contra a pessoa", "Crimes contra o patrimônio", "Crimes contra a Administração Pública"]
+      },
+      {
+        subject: "Direito Processual Penal",
+        topics: ["Inquérito Policial", "Ação Penal", "Prisões e Medidas Cautelares", "Provas no processo penal"]
+      },
+      {
+        subject: "Legislação Especial",
+        topics: ["Lei de Drogas (Lei 11.343/06)", "Estatuto do Desarmamento (Lei 10.826/03)", "Abuso de Autoridade (Lei 13.869/19)", "Interceptação Telefônica", "Lavagem de Dinheiro"]
+      }
+    ]
+  },
+  {
+    name: "Polícia Rodoviária Federal (PRF) - Policial",
+    description: "Completo para a PRF com foco forte em legislação de trânsito e física aplicada.",
+    subjects: [
+      {
+        subject: "Português",
+        topics: ["Compreensão e interpretação de textos", "Tipologia textual", "Coesão e coerência", "Emprego de tempos e modos verbais", "Crase", "Pontuação"]
+      },
+      {
+        subject: "Raciocínio Lógico-Matemático",
+        topics: ["Proposições simples e compostas", "Tabelas-verdade", "Funções de 1º e 2º graus", "Geometria básica", "Estatística descritiva"]
+      },
+      {
+        subject: "Legislação de Trânsito (CTB)",
+        topics: ["Código de Trânsito Brasileiro (Lei 9.503/97)", "Normas Gerais de Circulação e Conduta", "Sinalização de Trânsito", "Infrações e Penalidades", "Resoluções do CONTRAN prioritárias"]
+      },
+      {
+        subject: "Física",
+        topics: ["Cinemática escalar e vetorial", "Movimento Uniforme e Variado", "Dinâmica e Leis de Newton", "Trabalho e Energia", "Colisões e conservação de quantidade de movimento"]
+      },
+      {
+        subject: "Direito Constitucional",
+        topics: ["Princípios Fundamentais", "Direitos e Deveres Individuais e Coletivos", "Segurança Pública", "Ordem Social"]
+      },
+      {
+        subject: "Direito Administrativo",
+        topics: ["Princípios da Administração Pública", "Organização Administrativa", "Atos Administrativos", "Serviços Públicos", "Controle da Administração"]
+      },
+      {
+        subject: "Direito Penal e Processo Penal",
+        topics: ["Infração penal: elements e espécies", "Exclusão de ilicitude", "Prisão em flagrante", "Inquérito policial"]
+      },
+      {
+        subject: "Direitos Humanos",
+        topics: ["Teoria geral dos direitos humanos", "Declaração Universal dos Direitos Humanos", "Pacto de San José da Costa Rica", "Direitos humanos na Constituição"]
+      }
+    ]
+  },
+  {
+    name: "INSS - Técnico do Seguro Social",
+    description: "Perfeito para quem busca cargo administrativo com foco total em Direito Previdenciário.",
+    subjects: [
+      {
+        subject: "Direito Previdenciário",
+        topics: ["Seguridade Social: origem e princípios", "Regime Geral de Previdência Social (RGPS)", "Segurados obrigatórios e facultativos", "Carência e filiação", "Benefícios previdenciários (Aposentadorias, Auxílios, Pensão)", "Financiamento da Seguridade Social"]
+      },
+      {
+        subject: "Português",
+        topics: ["Leitura e interpretação de textos", "Morfossintaxe", "Concordância nominal e verbal", "Regência e crase", "Redação Oficial (Manual da Presidência)"]
+      },
+      {
+        subject: "Direito Administrativo",
+        topics: ["Organização administrativa brasileira", "Agentes Públicos e Lei 8.112/90", "Improbidade Administrativa (Lei 8.429/92)", "Processo Administrativo Federal (Lei 9.784/99)"]
+      },
+      {
+        subject: "Direito Constitucional",
+        topics: ["Direitos Fundamentais", "Direitos Sociais", "Administração Pública na CF", "Ordem Social e Seguridade na CF"]
+      },
+      {
+        subject: "Raciocínio Lógico e Informática",
+        topics: ["Estruturas lógicas e proposições", "Editor de textos e planilhas (Word/Excel)", "Navegadores e ferramentas de busca", "Segurança na internet"]
+      },
+      {
+        subject: "Ética no Serviço Público",
+        topics: ["Decreto 1.171/94 (Código de Ética do Executivo Federal)", "Ética e moral", "Lei 8.112/90 na parte disciplinar"]
+      }
+    ]
+  },
+  {
+    name: "Tribunais (TJ/TRE) - Técnico Judiciário (Administrativa)",
+    description: "Excelente base para concursos de tribunais federais ou estaduais na área administrativa.",
+    subjects: [
+      {
+        subject: "Português",
+        topics: ["Interpretação de textos", "Ortografia e acentuação", "Sintaxe", "Crase", "Pontuação", "Concordância e regência"]
+      },
+      {
+        subject: "Direito Constitucional",
+        topics: ["Direitos e Garantias Fundamentais", "Poder Judiciário", "Funções Essenciais à Justiça", "Conselho Nacional de Justiça (CNJ)"]
+      },
+      {
+        subject: "Direito Administrativo",
+        topics: ["Atos Administrativos", "Licitações (Lei 14.133/21)", "Improbidade Administrativa", "Lei 8.112/90 ou estatuto estadual correspondente"]
+      },
+      {
+        subject: "Direito Processual Civil",
+        topics: ["Partes e procuradores", "Atos processuais: prazos e comunicações", "Procedimento comum: petição inicial e contestação", "Recursos (noções gerais)"]
+      },
+      {
+        subject: "Direito Processual Penal",
+        topics: ["Inquérito policial e Ação Penal", "Juizados Especiais Criminais (Lei 9.099/95)", "Prisão em flagrante e preventiva"]
+      },
+      {
+        subject: "Administração Pública",
+        topics: ["Processo organizacional: planejamento, direção, controle", "Gestão de Pessoas", "Gestão de Materiais e Patrimônio", "Atendimento ao cidadão e ouvidoria"]
+      }
+    ]
+  }
+];

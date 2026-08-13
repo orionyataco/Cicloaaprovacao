@@ -6,7 +6,7 @@ import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, deleteDoc as deleteCloudDoc, writeBatch, collection } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc as deleteCloudDoc, writeBatch } from 'firebase/firestore';
 
 export function NotificationCenter() {
   const { notifications, markNotificationAsRead, deleteNotification, deleteAllNotifications } = useStore();

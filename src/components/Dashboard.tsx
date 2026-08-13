@@ -1,12 +1,39 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore } from '@/store';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { format, parseISO, isValid, startOfDay, subDays, differenceInCalendarDays, isAfter } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Target, CheckCircle2, Clock, BookOpen, Flame, Zap } from 'lucide-react';
+import { Target, CheckCircle2, Clock, BookOpen, Flame, Zap, Share2, Download, X, Loader2 } from 'lucide-react';
+import { toPng } from 'html-to-image';
 
 export function Dashboard() {
-  const { subjects, topics, questionLogs, simulados, studySessions } = useStore();
+  const { subjects, topics, questionLogs, simulados, studySessions, userProfile, editalInfo } = useStore();
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadCard = async () => {
+    setIsDownloading(true);
+    try {
+      const node = document.getElementById('achievement-card');
+      if (!node) return;
+      
+      const dataUrl = await toPng(node, {
+        quality: 0.95,
+        backgroundColor: '#09090b'
+      });
+      
+      const link = document.createElement('a');
+      link.download = `desempenho-${userProfile.name || 'estudante'}.png`;
+      link.href = dataUrl;
+      link.click();
+      setIsShareModalOpen(false);
+    } catch (error) {
+      console.error('Erro ao gerar card:', error);
+      alert('Não foi possível gerar a imagem. Tente novamente.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const stats = useMemo(() => {
     const totalQuestionsFromLogs = questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0);
@@ -124,8 +151,17 @@ export function Dashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <header>
-        <p className="text-zinc-400 mt-1">Acompanhe sua evolução e identifique pontos críticos.</p>
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">Desempenho Geral</h1>
+          <p className="text-zinc-400 mt-1">Acompanhe sua evolução e identifique pontos críticos.</p>
+        </div>
+        <button
+          onClick={() => setIsShareModalOpen(true)}
+          className="bg-gradient-to-r from-emerald-500 to-blue-600 hover:from-emerald-400 hover:to-blue-500 text-white font-bold px-4 py-2.5 rounded-xl transition-all duration-300 shadow-md shadow-emerald-950/20 active:scale-[0.98] flex items-center justify-center gap-2 text-sm shrink-0"
+        >
+          <Share2 className="w-4 h-4" /> <span>Gerar Card de Progresso</span>
+        </button>
       </header>
 
       {/* Summary Stats */}
@@ -348,6 +384,102 @@ export function Dashboard() {
           )}
         </div>
       </div>
+      {/* Share Card Modal */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Seu Card de Conquistas</span>
+              <button 
+                onClick={() => setIsShareModalOpen(false)}
+                className="p-1.5 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 flex flex-col items-center justify-center">
+              {/* O Card real que será capturado */}
+              <div 
+                id="achievement-card"
+                className="w-full aspect-[4/5] max-w-[340px] bg-gradient-to-br from-[#09090b] via-zinc-950 to-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden shadow-2xl"
+              >
+                {/* Glow Effects */}
+                <div className="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+                <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+                
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
+                  <div>
+                    <h3 className="text-white text-xs font-bold tracking-widest uppercase">Ciclo a Aprovação</h3>
+                    <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider mt-0.5">Foco & Disciplina</p>
+                  </div>
+                  <div className="bg-emerald-500/10 p-1.5 rounded-lg border border-emerald-500/20">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  </div>
+                </div>
+
+                {/* User Info */}
+                <div className="my-4 text-left w-full">
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Estudante</p>
+                  <p className="text-lg font-black text-white truncate">{userProfile.name || 'Estudante Concurseiro'}</p>
+                  <p className="text-[10px] text-zinc-400 truncate mt-1">
+                    🎯 {editalInfo.carreira || 'Geral'} {editalInfo.banca ? `| ${editalInfo.banca}` : ''}
+                  </p>
+                </div>
+
+                {/* Level / Badge */}
+                <div className="bg-zinc-900/50 border border-zinc-800/80 p-3.5 rounded-xl text-center flex items-center justify-center gap-2 w-full">
+                  <span className="text-xl">🏆</span>
+                  <div className="text-left">
+                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Nível de Foco</p>
+                    <p className="text-xs font-black text-emerald-400">
+                      {hours >= 20 ? 'Guerreiro Lendário' : hours >= 5 ? 'Estudante Altamente Focado' : 'Estudante Iniciante'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-2 gap-3 mt-4 border-t border-zinc-800/80 pt-4 w-full">
+                  <div className="bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-900 text-left">
+                    <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest block">Questões</span>
+                    <span className="text-sm font-black text-white">{totalQuestionsAll}</span>
+                  </div>
+                  <div className="bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-900 text-left">
+                    <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest block">Acertos</span>
+                    <span className="text-sm font-black text-emerald-400">
+                      {totalQuestionsAll > 0 ? `${Math.round((totalCorrectAll / totalQuestionsAll) * 100)}%` : '0%'}
+                    </span>
+                  </div>
+                  <div className="bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-900 col-span-2 text-center">
+                    <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest block">Horas Líquidas</span>
+                    <span className="text-sm font-black text-blue-400">{hours}h {minutes}m</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botão de Download */}
+              <button
+                onClick={handleDownloadCard}
+                disabled={isDownloading}
+                className="w-full mt-6 bg-gradient-to-r from-emerald-500 to-blue-600 hover:from-emerald-400 hover:to-blue-500 text-white font-bold py-3.5 rounded-2xl transition-all duration-300 shadow-lg shadow-emerald-500/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>GERANDO IMAGEM...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-5 h-5" />
+                    <span>BAIXAR CARD DE DESEMPENHO</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
