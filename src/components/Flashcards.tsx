@@ -132,28 +132,61 @@ export function Flashcards() {
               </div>
               
               <div 
-                className="bg-zinc-900 border border-zinc-800 rounded-3xl p-10 min-h-[300px] flex flex-col items-center justify-center text-center cursor-pointer transition-all hover:border-zinc-700 shadow-2xl"
+                className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-10 min-h-[300px] max-h-[70vh] flex flex-col cursor-pointer transition-all hover:border-zinc-700 shadow-2xl"
                 onClick={() => !showBack && setShowBack(true)}
               >
-                <div className="text-xs text-zinc-500 uppercase tracking-widest mb-6 font-semibold">
-                  {topics.find(t => t.id === currentCard.topicId)?.name}
-                </div>
-                
-                <div className="text-2xl text-zinc-100 font-medium leading-relaxed">
-                  {currentCard.front}
-                </div>
+                {/* Label do tópico — prioridade para campos de texto livre (cards de IA),
+                    fallback para lookup por topicId (cards manuais cadastrados) */}
+                {(() => {
+                  const subjectText = currentCard.subjectLabel
+                    ?? subjects.find(s => s.id === topics.find(t => t.id === currentCard.topicId)?.subjectId)?.name;
+                  const topicText = currentCard.topicLabel
+                    ?? topics.find(t => t.id === currentCard.topicId)?.name;
 
-                {showBack ? (
-                  <div className="mt-8 pt-8 border-t border-zinc-800 w-full animate-in fade-in slide-in-from-bottom-4">
-                    <div className="text-xl text-emerald-400 font-medium leading-relaxed">
-                      {currentCard.back}
+                  if (!subjectText && !topicText) return null;
+
+                  return (
+                    <div className="flex flex-wrap items-center gap-2 mb-4 flex-shrink-0">
+                      {subjectText && (
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-1 rounded-md">
+                          {subjectText}
+                        </span>
+                      )}
+                      {topicText && topicText !== subjectText && (
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 bg-zinc-800/60 px-2 py-1 rounded-md max-w-[240px] truncate" title={topicText}>
+                          {topicText}
+                        </span>
+                      )}
                     </div>
-                  </div>
-                ) : (
-                  <div className="mt-12 text-sm text-zinc-500 flex items-center gap-2">
-                    <RefreshCw className="w-4 h-4" /> Clique para revelar a resposta
-                  </div>
-                )}
+                  );
+                })()}
+
+                {/* Frente do card — scroll quando o texto for longo */}
+                <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center text-center custom-scrollbar py-2">
+                  <p className={`text-zinc-100 font-medium leading-relaxed whitespace-pre-wrap ${
+                    currentCard.front.length > 400 ? 'text-sm' :
+                    currentCard.front.length > 200 ? 'text-base' :
+                    'text-xl'
+                  }`}>
+                    {currentCard.front}
+                  </p>
+
+                  {showBack ? (
+                    <div className="mt-6 pt-6 border-t border-zinc-800 w-full animate-in fade-in slide-in-from-bottom-4">
+                      <p className={`text-emerald-400 font-medium leading-relaxed whitespace-pre-wrap ${
+                        currentCard.back.length > 400 ? 'text-sm' :
+                        currentCard.back.length > 200 ? 'text-base' :
+                        'text-lg'
+                      }`}>
+                        {currentCard.back}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-8 text-sm text-zinc-500 flex items-center gap-2 flex-shrink-0">
+                      <RefreshCw className="w-4 h-4" /> Clique para revelar a resposta
+                    </div>
+                  )}
+                </div>
               </div>
 
               {showBack && (

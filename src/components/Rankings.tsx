@@ -243,6 +243,21 @@ export function Rankings() {
     }
   };
 
+  /**
+   * Wilson Score Interval (z = 1.28, 80% confiança)
+   * Ordena por proficiência penalizando amostras pequenas.
+   * Ex: 1/1 (100%) fica atrás de 27/29 (93%) porque o intervalo inferior de Wilson é maior para quem tem mais dados.
+   */
+  const wilsonScore = (correct: number, total: number): number => {
+    if (total === 0) return 0;
+    const z = 1.28; // 80% confidence
+    const phat = correct / total;
+    return (
+      (phat + (z * z) / (2 * total) - z * Math.sqrt((phat * (1 - phat) + (z * z) / (4 * total)) / total)) /
+      (1 + (z * z) / total)
+    );
+  };
+
   const getSortedRanking = (metric: RankingMetric) => {
     const all = [...friendsProfiles];
     // Adiciona o próprio usuário se ele tiver um perfil (username)
@@ -251,9 +266,9 @@ export function Rankings() {
     }
     return all.sort((a, b) => {
       if (metric === 'proficiency') {
-        const profA = a.stats.totalQuestions > 0 ? (a.stats.totalCorrect / a.stats.totalQuestions) * 100 : 0;
-        const profB = b.stats.totalQuestions > 0 ? (b.stats.totalCorrect / b.stats.totalQuestions) * 100 : 0;
-        return profB - profA;
+        const scoreA = wilsonScore(a.stats.totalCorrect, a.stats.totalQuestions);
+        const scoreB = wilsonScore(b.stats.totalCorrect, b.stats.totalQuestions);
+        return scoreB - scoreA;
       }
       return ((b.stats as any)[metric] || 0) - ((a.stats as any)[metric] || 0);
     });
@@ -293,9 +308,9 @@ export function Rankings() {
 
     return all.sort((a: any, b: any) => {
       if (activeWeeklyMetric === 'proficiency') {
-        const profA = a.weeklyStats?.totalQuestions > 0 ? (a.weeklyStats.correctAnswers / a.weeklyStats.totalQuestions) * 100 : 0;
-        const profB = b.weeklyStats?.totalQuestions > 0 ? (b.weeklyStats.correctAnswers / b.weeklyStats.totalQuestions) * 100 : 0;
-        return profB - profA;
+        const scoreA = wilsonScore(a.weeklyStats?.correctAnswers || 0, a.weeklyStats?.totalQuestions || 0);
+        const scoreB = wilsonScore(b.weeklyStats?.correctAnswers || 0, b.weeklyStats?.totalQuestions || 0);
+        return scoreB - scoreA;
       }
       const valA = a.weeklyStats?.[activeWeeklyMetric] || 0;
       const valB = b.weeklyStats?.[activeWeeklyMetric] || 0;
@@ -567,8 +582,9 @@ export function Rankings() {
                              `${profile.stats.totalQuestions > 0 ? Math.round((profile.stats.totalCorrect / profile.stats.totalQuestions) * 100) : 0}%`}
                           </p>
                           <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
-                            {activeRankingTab === 'proficiency' ? 'Aproveitamento' : 
-                             activeRankingTab === 'totalStudySeconds' ? 'Estudadas' : 'Concluídas'}
+                            {activeRankingTab === 'proficiency'
+                              ? `${profile.stats.totalQuestions} questões`
+                              : activeRankingTab === 'totalStudySeconds' ? 'Estudadas' : 'Concluídas'}
                           </p>
                         </div>
                       </div>

@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStore } from '@/store';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, AlertTriangle, Trash2, BrainCircuit, Share2, Users, Search, ExternalLink } from 'lucide-react';
+import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, ChevronDown, AlertTriangle, Trash2, BrainCircuit, Share2, Users, Search, ExternalLink, BookOpen, BarChart2 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc, limit, setDoc } from 'firebase/firestore';
 import { cn, fetchDocsByIds } from '@/lib/utils';
@@ -33,7 +33,8 @@ export function Simulados() {
     addWrongQuestion,
     deleteWrongQuestion,
     updateWrongQuestionErrorReason,
-    updateWrongQuestionAiAnalysis
+    updateWrongQuestionAiAnalysis,
+    questionLogs
   } = useStore();
   
   const [isAdding, setIsAdding] = useState(false);
@@ -46,6 +47,24 @@ export function Simulados() {
   const [manualSubjectScores, setManualSubjectScores] = useState<Record<string, { correct: string, total: string }>>({});
   const [activeTab, setActiveTab] = useState<'simulados' | 'erros'>('simulados');
   const [analyzingId, setAnalyzingId] = useState<string|null>(null);
+  const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
+
+  // Agrega questionLogs por matéria → tópico para o painel de desempenho
+  const subjectPerformance = useMemo(() => {
+    return subjects.map(subject => {
+      const subjectTopics = topics.filter(t => t.subjectId === subject.id);
+      const topicStats = subjectTopics.map(topic => {
+        const logs = questionLogs.filter(l => l.topicId === topic.id);
+        const total = logs.reduce((acc, l) => acc + l.totalQuestions, 0);
+        const correct = logs.reduce((acc, l) => acc + l.correctAnswers, 0);
+        return { topic, total, correct, pct: total > 0 ? Math.round((correct / total) * 100) : null };
+      }).filter(ts => ts.total > 0); // só tópicos com ao menos 1 questão
+
+      const totalQ = topicStats.reduce((acc, ts) => acc + ts.total, 0);
+      const totalC = topicStats.reduce((acc, ts) => acc + ts.correct, 0);
+      return { subject, topicStats, totalQ, totalC, pct: totalQ > 0 ? Math.round((totalC / totalQ) * 100) : null };
+    }).filter(sp => sp.totalQ > 0); // só matérias com ao menos 1 questão
+  }, [subjects, topics, questionLogs]);
 
   const handleAnalyzeError = async (wq: any) => {
     setAnalyzingId(wq.id);
@@ -456,10 +475,15 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO (SEM TEXTO ADICIONAL FORA DO JSON, 
   };
 
   const handleConvertToFlashcard = (q: GeneratedQuestion, index: number) => {
+    // Tenta associar a um tópico cadastrado pelo nome, mas NÃO usa fallback para topics[0]
+    // (evita label errada de "Língua Portuguesa" em cards de Direito Constitucional, etc.)
+    const matchedTopic = topics.find(t => t.name.toLowerCase() === q.topic.toLowerCase());
     addFlashcard({
-      topicId: topics.find(t => t.name === q.topic)?.id || topics[0]?.id || 't1',
+      topicId: matchedTopic?.id || '__ai__',
+      subjectLabel: q.subject,
+      topicLabel: q.topic,
       front: q.text,
-      back: `Assunto: ${q.subject}\nResposta: ${q.options[q.correctIndex]}\n\nExplicação: ${q.explanation}`
+      back: `Resposta: ${q.options[q.correctIndex]}\n\nExplicação: ${q.explanation}`
     });
     setConvertedToFlashcard(prev => ({ ...prev, [index]: true }));
   };
@@ -1132,57 +1156,126 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO (SEM TEXTO ADICIONAL FORA DO JSON, 
             </form>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Painel de Desempenho por Matéria e Assunto */}
+          {subjectPerformance.length > 0 && (
+            <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-zinc-800 bg-zinc-900">
+                <BarChart2 className="w-5 h-5 text-blue-400" />
+                <div>
+                  <h2 className="text-sm font-bold text-zinc-100">Desempenho por Matéria</h2>
+                  <p className="text-[10px] text-zinc-500">Agregado de todos os simulados e questões respondidas, conforme o edital</p>
+                </div>
+              </div>
+              <div className="divide-y divide-zinc-800/60">
+                {subjectPerformance.map(({ subject, topicStats, totalQ, totalC, pct }) => {
+                  const isExpanded = expandedSubjects[subject.id] ?? false;
+                  const pctColor = pct === null ? 'text-zinc-500' : pct >= 85 ? 'text-emerald-400' : pct >= 70 ? 'text-blue-400' : 'text-red-400';
+                  const barColor = pct === null ? 'bg-zinc-700' : pct >= 85 ? 'bg-emerald-500' : pct >= 70 ? 'bg-blue-500' : 'bg-red-500';
+
+                  return (
+                    <div key={subject.id}>
+                      {/* Linha da Matéria — clicável para expandir tópicos */}
+                      <button
+                        className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-zinc-800/40 transition-colors text-left group"
+                        onClick={() => setExpandedSubjects(prev => ({ ...prev, [subject.id]: !isExpanded }))}
+                      >
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: subject.color }} />
+                        <span className="flex-1 text-sm font-semibold text-zinc-100 truncate">{subject.name}</span>
+                        <span className="text-xs text-zinc-500 flex-shrink-0 hidden sm:block">{totalQ} questões</span>
+                        <div className="w-24 h-1.5 rounded-full bg-zinc-800 overflow-hidden flex-shrink-0">
+                          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct ?? 0}%` }} />
+                        </div>
+                        <span className={`text-sm font-bold flex-shrink-0 w-10 text-right ${pctColor}`}>
+                          {pct !== null ? `${pct}%` : '—'}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-zinc-600 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {/* Tópicos expandidos */}
+                      {isExpanded && (
+                        <div className="bg-zinc-950/40 border-t border-zinc-800/50 divide-y divide-zinc-800/30">
+                          {topicStats.map(({ topic, total, correct, pct: tPct }) => {
+                            const tColor = tPct === null ? 'text-zinc-500' : tPct >= 85 ? 'text-emerald-400' : tPct >= 70 ? 'text-blue-400' : 'text-red-400';
+                            const tBar = tPct === null ? 'bg-zinc-700' : tPct >= 85 ? 'bg-emerald-500' : tPct >= 70 ? 'bg-blue-500' : 'bg-red-500';
+                            return (
+                              <div key={topic.id} className="flex items-center gap-4 pl-8 pr-5 py-2.5">
+                                <BookOpen className="w-3 h-3 text-zinc-600 flex-shrink-0" />
+                                <span className="flex-1 text-xs text-zinc-400 truncate" title={topic.name}>{topic.name}</span>
+                                <span className="text-[10px] text-zinc-600 flex-shrink-0 hidden sm:block">{correct}/{total}</span>
+                                <div className="w-20 h-1 rounded-full bg-zinc-800 overflow-hidden flex-shrink-0">
+                                  <div className={`h-full rounded-full ${tBar}`} style={{ width: `${tPct ?? 0}%` }} />
+                                </div>
+                                <span className={`text-xs font-bold flex-shrink-0 w-10 text-right ${tColor}`}>
+                                  {tPct !== null ? `${tPct}%` : '—'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                          {topicStats.length === 0 && (
+                            <div className="pl-8 pr-5 py-3 text-[10px] text-zinc-600 italic">
+                              Nenhum tópico com questões respondidas ainda.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          <div className="flex flex-col divide-y divide-zinc-800/70 border border-zinc-800 rounded-2xl overflow-hidden">
             {simulados.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(simulado => {
               const percentage = Math.round((simulado.score / simulado.total) * 100);
               let colorClass = "text-zinc-400";
-              if (percentage >= 85) colorClass = "text-emerald-400";
-              else if (percentage >= 70) colorClass = "text-blue-400";
-              else colorClass = "text-red-400";
+              let bgBadge = "bg-zinc-800/60 border-zinc-700";
+              if (percentage >= 85) { colorClass = "text-emerald-400"; bgBadge = "bg-emerald-500/10 border-emerald-500/20"; }
+              else if (percentage >= 70) { colorClass = "text-blue-400"; bgBadge = "bg-blue-500/10 border-blue-500/20"; }
+              else { colorClass = "text-red-400"; bgBadge = "bg-red-500/10 border-red-500/20"; }
 
               return (
-                <div key={simulado.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 hover:border-zinc-700 transition-colors">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-2">
-                      <Trophy className={`w-5 h-5 ${colorClass}`} />
-                      <h3 className="font-semibold text-zinc-100">{simulado.name}</h3>
+                <div key={simulado.id} className="flex items-center gap-4 px-4 py-3 bg-zinc-900 hover:bg-zinc-800/50 transition-colors group">
+                  {/* Ícone */}
+                  <Trophy className={`w-4 h-4 flex-shrink-0 ${colorClass}`} />
+
+                  {/* Nome */}
+                  <span className="flex-1 text-sm font-medium text-zinc-100 truncate" title={simulado.name}>
+                    {simulado.name}
+                  </span>
+
+                  {/* Data */}
+                  <span className="text-xs text-zinc-500 hidden sm:block flex-shrink-0">
+                    {format(parseISO(simulado.date), "dd MMM yyyy", { locale: ptBR })}
+                  </span>
+
+                  {/* Score badge */}
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border flex-shrink-0 ${colorClass} ${bgBadge}`}>
+                    {percentage}% <span className="font-normal opacity-70">({simulado.score}/{simulado.total})</span>
+                  </span>
+
+                  {/* Excluir */}
+                  {confirmDelete === simulado.id ? (
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-xs text-red-400 font-medium hidden sm:block">Excluir?</span>
+                      <button onClick={() => { deleteSimulado(simulado.id); setConfirmDelete(null); }} className="text-[11px] bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Sim</button>
+                      <button onClick={() => setConfirmDelete(null)} className="text-[11px] bg-zinc-700 text-zinc-200 px-2 py-1 rounded hover:bg-zinc-600">Não</button>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-zinc-500">
-                        {format(parseISO(simulado.date), "dd MMM yyyy", { locale: ptBR })}
-                      </span>
-                      {confirmDelete === simulado.id ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-red-400 font-medium">Excluir?</span>
-                          <button onClick={() => { deleteSimulado(simulado.id); setConfirmDelete(null); }} className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Sim</button>
-                          <button onClick={() => setConfirmDelete(null)} className="text-xs bg-zinc-700 text-zinc-200 px-2 py-1 rounded hover:bg-zinc-600">Não</button>
-                        </div>
-                      ) : (
-                        <button 
-                          onClick={() => setConfirmDelete(simulado.id)}
-                          className="text-zinc-500 hover:text-red-400 transition-colors p-1 rounded-md hover:bg-red-400/10"
-                          title="Excluir simulado"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-end gap-2">
-                    <span className={`text-4xl font-bold tracking-tighter ${colorClass}`}>
-                      {percentage}%
-                    </span>
-                    <span className="text-sm text-zinc-500 mb-1">
-                      ({simulado.score}/{simulado.total})
-                    </span>
-                  </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDelete(simulado.id)}
+                      className="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all opacity-0 group-hover:opacity-100 flex-shrink-0"
+                      title="Excluir simulado"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               );
             })}
-            
+
             {simulados.length === 0 && !isAdding && (
-              <div className="col-span-full text-center py-12 text-zinc-500 border border-dashed border-zinc-800 rounded-2xl">
+              <div className="text-center py-12 text-zinc-500">
                 Nenhum simulado registrado.
               </div>
             )}

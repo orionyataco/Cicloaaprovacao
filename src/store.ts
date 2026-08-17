@@ -59,6 +59,10 @@ export interface Flashcard {
   nextReviewAt: string | null;
   interval: number;
   easeFactor: number;
+  /** Matéria da questão de IA (texto livre, não depende de topicId) */
+  subjectLabel?: string;
+  /** Tópico da questão de IA (texto livre, não depende de topicId) */
+  topicLabel?: string;
 }
 
 export interface Simulado {
