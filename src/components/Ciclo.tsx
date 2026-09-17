@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useStore, ErrorReason } from '@/store';
-import { isBefore, startOfDay, parseISO, getDay } from 'date-fns';
+import { isBefore, startOfDay, parseISO, getDay, isSameDay } from 'date-fns';
 import { 
   CheckCircle2, 
   AlertTriangle, 
@@ -22,7 +22,8 @@ import {
   User,
   BarChart2,
   FileText,
-  Check
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { callGemini, callGeminiJSON } from '@/lib/gemini';
@@ -103,7 +104,7 @@ const getThemeClasses = (colorTheme: string) => {
 };
 
 export function Ciclo({ onViewChange }: { onViewChange: (view: any) => void }) {
-  const { topics, subjects, addQuestionLog, questionLogs, currentCycleIndex, scheduleConfig, setActiveTopicId, setAutoGenerateTopicId } = useStore();
+  const { topics, subjects, addQuestionLog, questionLogs, studySessions, currentCycleIndex, scheduleConfig, setActiveTopicId, setAutoGenerateTopicId, updateTopicStatus } = useStore();
   const [selectedTopic, setSelectedTopic] = useState('');
   const [totalQuestions, setTotalQuestions] = useState('');
   const [correctAnswers, setCorrectAnswers] = useState('');
@@ -303,17 +304,47 @@ Escreva em português do Brasil, utilizando formatação markdown limpa (negrito
       .map(t => topics.find(topic => topic.id === t.id)!);
   }, [topics, questionLogs]);
 
-  // Cálculo e memoização do ciclo de matérias do dia (evita recalcular em renderizações menores)
+  // Tópicos/Matérias estudados ou concluídos HOJE
+  const topicsStudiedToday = useMemo(() => {
+    return topics.filter(t => {
+      if (t.lastStudiedAt && isSameDay(parseISO(t.lastStudiedAt), today)) {
+        return true;
+      }
+      const hasSessionToday = studySessions.some(s => s.topicId === t.id && isSameDay(parseISO(s.date), today));
+      if (hasSessionToday) return true;
+
+      const hasLogToday = questionLogs.some(q => q.topicId === t.id && isSameDay(parseISO(q.date), today));
+      if (hasLogToday) return true;
+
+      return false;
+    });
+  }, [topics, studySessions, questionLogs, today]);
+
+  // Cálculo e memoização do ciclo de matérias do dia (limitado à meta diária de horasPerDay)
   const dayOfWeek = getDay(today);
   const isActiveToday = scheduleConfig.activeDays.includes(dayOfWeek);
-  
+
   const cycleData = useMemo(() => {
     const hoursPerActiveDay = scheduleConfig.hoursPerDay;
-    const result: { subject: typeof subjects[0]; topic: typeof topics[0] | undefined }[] = [];
+    
+    // Matérias/Tópicos já concluídos ou estudados HOJE
+    const completedTodayList: { subject: typeof subjects[0]; topic: typeof topics[0]; isCompleted: true }[] = [];
+    
+    topicsStudiedToday.forEach(topic => {
+      const subject = subjects.find(s => s.id === topic.subjectId);
+      if (subject) {
+        completedTodayList.push({ subject, topic, isCompleted: true });
+      }
+    });
 
-    if (isActiveToday && subjects.length > 0) {
+    const completedTodayCount = completedTodayList.length;
+    const neededPendingCount = Math.max(0, hoursPerActiveDay - completedTodayCount);
+
+    const pendingTodayList: { subject: typeof subjects[0]; topic: typeof topics[0]; isCompleted: false }[] = [];
+
+    if (isActiveToday && subjects.length > 0 && neededPendingCount > 0) {
       const subjectsWithPending = subjects.filter(s =>
-        topics.some(t => t.subjectId === s.id && t.status === 'NOT_READ')
+        topics.some(t => t.subjectId === s.id && t.status === 'NOT_READ' && !completedTodayList.some(c => c.topic.id === t.id))
       );
 
       if (subjectsWithPending.length > 0) {
@@ -322,7 +353,7 @@ Escreva em português do Brasil, utilizando formatação markdown limpa (negrito
         let attempts = 0;
         const maxAttempts = subjects.length * hoursPerActiveDay;
 
-        while (result.length < hoursPerActiveDay && attempts < maxAttempts) {
+        while (pendingTodayList.length < neededPendingCount && attempts < maxAttempts) {
           const subject = subjects[pointer % subjects.length];
           pointer++;
           attempts++;
@@ -331,12 +362,16 @@ Escreva em português do Brasil, utilizando formatação markdown limpa (negrito
             continue;
           }
 
-          const firstPendingTopic = topics.find(t => t.subjectId === subject.id && t.status === 'NOT_READ');
+          const firstPendingTopic = topics.find(t => 
+            t.subjectId === subject.id && 
+            t.status === 'NOT_READ' &&
+            !completedTodayList.some(c => c.topic.id === t.id)
+          );
           if (!firstPendingTopic) {
             continue;
           }
 
-          result.push({ subject, topic: firstPendingTopic });
+          pendingTodayList.push({ subject, topic: firstPendingTopic, isCompleted: false });
           usedSubjectIds.add(subject.id);
 
           if (usedSubjectIds.size >= subjectsWithPending.length) {
@@ -345,8 +380,27 @@ Escreva em português do Brasil, utilizando formatação markdown limpa (negrito
         }
       }
     }
-    return result;
-  }, [subjects, topics, currentCycleIndex, scheduleConfig, isActiveToday]);
+
+    const totalList = [...completedTodayList, ...pendingTodayList];
+    const isGoalReached = completedTodayCount >= hoursPerActiveDay || (topics.length > 0 && !topics.some(t => t.status === 'NOT_READ'));
+
+    return {
+      completedList: completedTodayList,
+      pendingList: pendingTodayList,
+      totalList,
+      completedTodayCount,
+      targetDailyHours: hoursPerActiveDay,
+      isGoalReached
+    };
+  }, [subjects, topics, currentCycleIndex, scheduleConfig, isActiveToday, topicsStudiedToday]);
+
+  const handleQuickCompleteTopic = (topicId: string) => {
+    updateTopicStatus(topicId, 'THEORY_DONE');
+  };
+
+  const handleUndoCompleteTopic = (topicId: string) => {
+    updateTopicStatus(topicId, 'NOT_READ');
+  };
 
   const handleLogSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -402,47 +456,147 @@ Escreva em português do Brasil, utilizando formatação markdown limpa (negrito
           )}
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <BookMarked className="w-5 h-5 text-blue-500" />
-              <h2 className="text-lg font-semibold text-zinc-100">Ciclo de Hoje (Teoria Pendente)</h2>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+              <div className="flex items-center gap-2">
+                <BookMarked className="w-5 h-5 text-blue-500" />
+                <div>
+                  <h2 className="text-lg font-semibold text-zinc-100">Ciclo de Hoje</h2>
+                  <p className="text-xs text-zinc-400">Meta diária: {scheduleConfig.hoursPerDay} matéria(s) / hora(s)</p>
+                </div>
+              </div>
+              
+              {isActiveToday && subjects.length > 0 && (
+                <div className="flex items-center gap-3 bg-zinc-950 px-4 py-2 rounded-xl border border-zinc-800 shrink-0">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Progresso Diário</span>
+                    <span className="text-xs font-bold text-zinc-200">
+                      {cycleData.completedTodayCount} de {cycleData.targetDailyHours} concluídas
+                    </span>
+                  </div>
+                  <div className="w-20 bg-zinc-800 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-emerald-500 h-full transition-all duration-500 rounded-full" 
+                      style={{ width: `${Math.min(100, Math.round((cycleData.completedTodayCount / cycleData.targetDailyHours) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             
             {isActiveToday ? (
-              cycleData.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                  {cycleData.map((item, idx) => (
-                    <div key={`cycle-group-${idx}`} className="space-y-3 p-4 bg-zinc-800/20 rounded-2xl border border-zinc-800/50">
-                      <div className="flex items-center gap-2 px-1">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.subject.color }} />
-                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest truncate">{item.subject.name}</span>
+              cycleData.isGoalReached ? (
+                <div className="space-y-6">
+                  <div className="text-center py-8 px-6 bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/20 rounded-2xl flex flex-col items-center justify-center animate-in zoom-in-95 duration-500">
+                    <div className="w-16 h-16 bg-emerald-500/20 border border-emerald-500/30 rounded-full flex items-center justify-center mb-4 text-emerald-400 shadow-lg shadow-emerald-500/20">
+                      <CheckCircle2 className="w-9 h-9" />
+                    </div>
+                    <h3 className="text-zinc-100 font-bold text-xl mb-2">Parabéns pelo estudo de hoje! 🎉</h3>
+                    <p className="text-zinc-300 text-sm max-w-md leading-relaxed">
+                      Você atingiu a sua meta diária de <strong className="text-emerald-400">{cycleData.completedTodayCount} matéria(s) ({cycleData.targetDailyHours}h)</strong>. 
+                      Agora é hora de descansar e recarregar para o próximo dia ativo!
+                    </p>
+                  </div>
+
+                  {cycleData.completedList.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Matérias Concluídas Hoje:</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {cycleData.completedList.map((item, idx) => (
+                          <div key={`completed-${idx}`} className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.subject.color }} />
+                                <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest truncate">{item.subject.name}</span>
+                              </div>
+                              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-md uppercase flex items-center gap-1 shrink-0">
+                                <Check className="w-3 h-3" /> Concluído
+                              </span>
+                            </div>
+                            <div className="font-medium text-zinc-200 text-sm truncate">{item.topic.name}</div>
+                            <button
+                              onClick={() => handleUndoCompleteTopic(item.topic.id)}
+                              className="text-[11px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors pt-1"
+                            >
+                              <RotateCcw className="w-3 h-3" /> Desfazer conclusão
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                      
-                      {item.topic ? (
-                        <button 
-                          key={`topic-${item.topic.id}`} 
-                          onClick={() => openRegisterModal(item.topic!.id)}
-                          className="w-full flex items-center gap-3 bg-zinc-800/30 p-3 rounded-xl border border-zinc-800/50 group hover:border-blue-500/30 transition-all text-left"
-                        >
-                          <BookOpen className="w-4 h-4 text-zinc-600 group-hover:text-blue-400 transition-colors flex-shrink-0" />
-                          <div className="font-medium text-zinc-300 text-sm group-hover:text-white transition-colors line-clamp-2">{item.topic.name}</div>
-                        </button>
-                      ) : (
-                        <div className="text-xs text-zinc-600 italic px-1">
-                          Todas as teorias concluídas!
+                    </div>
+                  )}
+                </div>
+              ) : cycleData.totalList.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                  {cycleData.totalList.map((item, idx) => (
+                    <div key={`cycle-group-${idx}`} className={cn(
+                      "space-y-3 p-4 rounded-2xl border transition-all flex flex-col justify-between",
+                      item.isCompleted 
+                        ? "bg-emerald-500/5 border-emerald-500/20" 
+                        : "bg-zinc-800/20 border-zinc-800/50"
+                    )}>
+                      <div>
+                        <div className="flex items-center justify-between px-1 mb-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.subject.color }} />
+                            <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest truncate">{item.subject.name}</span>
+                          </div>
+                          {item.isCompleted && (
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-md uppercase flex items-center gap-1 shrink-0">
+                              <Check className="w-3 h-3" /> Concluído Hoje
+                            </span>
+                          )}
+                        </div>
+                        
+                        {item.topic ? (
+                          <button 
+                            key={`topic-${item.topic.id}`} 
+                            onClick={() => openRegisterModal(item.topic.id)}
+                            className={cn(
+                              "w-full flex items-center gap-3 p-3 rounded-xl border group transition-all text-left",
+                              item.isCompleted
+                                ? "bg-emerald-950/20 border-emerald-500/30 hover:border-emerald-500/50"
+                                : "bg-zinc-800/30 border-zinc-800/50 hover:border-blue-500/30"
+                            )}
+                          >
+                            <BookOpen className={cn(
+                              "w-4 h-4 flex-shrink-0 transition-colors",
+                              item.isCompleted ? "text-emerald-400" : "text-zinc-600 group-hover:text-blue-400"
+                            )} />
+                            <div className={cn(
+                              "font-medium text-sm line-clamp-2 transition-colors",
+                              item.isCompleted ? "text-emerald-200 line-through decoration-emerald-500/50" : "text-zinc-300 group-hover:text-white"
+                            )}>
+                              {item.topic.name}
+                            </div>
+                          </button>
+                        ) : (
+                          <div className="text-xs text-zinc-600 italic px-1">
+                            Todas as teorias concluídas!
+                          </div>
+                        )}
+                      </div>
+
+                      {item.topic && (
+                        <div>
+                          {!item.isCompleted ? (
+                            <button
+                              onClick={() => handleQuickCompleteTopic(item.topic!.id)}
+                              className="w-full flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs font-medium transition-all active:scale-[0.98]"
+                            >
+                              <Check className="w-3.5 h-3.5" /> Marcar Teoria como Concluída
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleUndoCompleteTopic(item.topic!.id)}
+                              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 rounded-xl text-[11px] transition-all"
+                            >
+                              <RotateCcw className="w-3 h-3" /> Desfazer
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
                   ))}
-                </div>
-              ) : subjects.length > 0 && topics.length > 0 && !topics.some(t => t.status === 'NOT_READ') ? (
-                <div className="text-center py-10 flex flex-col items-center justify-center animate-in zoom-in-95 duration-500">
-                  <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-                  </div>
-                  <h3 className="text-zinc-100 font-bold text-lg mb-2">Parabéns pelo estudo de hoje!</h3>
-                  <p className="text-zinc-500 text-sm max-w-[280px]">
-                    Você concluiu as teorias pendentes do dia. Descanse, e continue amanhã!
-                  </p>
                 </div>
               ) : (
                 <div className="text-center py-6 text-zinc-500 text-sm">
@@ -525,12 +679,32 @@ Escreva em português do Brasil, utilizando formatação markdown limpa (negrito
                   </div>
                   <div className="font-bold text-zinc-100">{topics.find(t => t.id === selectedTopic)?.name}</div>
                 </div>
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold px-4 py-2 rounded-xl text-xs transition-all flex items-center gap-2"
-                >
-                  <Play className="w-3 h-3 fill-current" /> Iniciar Estudo
-                </button>
+                <div className="flex items-center gap-2">
+                  {topics.find(t => t.id === selectedTopic)?.status !== 'NOT_READ' ? (
+                    <button
+                      onClick={() => handleUndoCompleteTopic(selectedTopic)}
+                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold px-3 py-2 rounded-xl text-xs transition-all flex items-center gap-1.5"
+                      title="Desfazer conclusão da matéria"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-zinc-400" /> Concluído
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        handleQuickCompleteTopic(selectedTopic);
+                      }}
+                      className="bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-400 font-bold px-3 py-2 rounded-xl text-xs transition-all flex items-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" /> Concluir Teoria
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setIsModalOpen(false)}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold px-4 py-2 rounded-xl text-xs transition-all flex items-center gap-2"
+                  >
+                    <Play className="w-3 h-3 fill-current" /> Iniciar Estudo
+                  </button>
+                </div>
               </div>
 
               <div className="mb-6">
