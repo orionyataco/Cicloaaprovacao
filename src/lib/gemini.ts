@@ -11,7 +11,7 @@ export function getApiKey(): string {
     return envKey;
   }
 
-  throw new Error('API Key do Gemini não encontrada. Por favor, insira sua chave da API do Gemini para ativar o AjudAÍ!');
+  throw new Error('API Key do Gemini não encontrada. Por favor, insira sua chave da API do Gemini para ativar os recursos de IA!');
 }
 
 export function hasValidGeminiKey(): boolean {
@@ -23,59 +23,81 @@ export function hasValidGeminiKey(): boolean {
   }
 }
 
-// Lista de modelos ordenados por preferência e velocidade
+// Modelos oficiais ordenados por estabilidade e velocidade
 const CANDIDATE_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
-  "gemini-2.5-flash"
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+  'gemini-2.0-flash-lite',
 ];
 
 async function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export async function callGemini(prompt: string, retries = 3, delayMs = 2000): Promise<string> {
+function isRateLimitError(err: any): boolean {
+  const msg = err?.message?.toLowerCase() || '';
+  return msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('quota') || msg.includes('limit');
+}
+
+function isOverloadError(err: any): boolean {
+  const msg = err?.message?.toLowerCase() || '';
+  return msg.includes('503') || msg.includes('overload') || msg.includes('high demand') || msg.includes('unavailable');
+}
+
+export async function callGemini(prompt: string, retries = 3, delayMs = 1500): Promise<string> {
   const apiKey = getApiKey();
   const genAI = new GoogleGenerativeAI(apiKey);
-
   let lastError: any = null;
 
-  // Tenta cada modelo disponível da família Gemini Flash / Pro
   for (const modelName of CANDIDATE_MODELS) {
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      
-      for (let i = 0; i < retries; i++) {
-        try {
-          const result = await model.generateContent(prompt);
-          const response = await result.response;
-          const text = response.text();
-          if (text && text.trim().length > 0) {
-            return text;
-          }
-        } catch (err: any) {
-          lastError = err;
-          const isRateLimit = err?.message?.includes('429') || 
-                              err?.message?.toLowerCase().includes('resource_exhausted') || 
-                              err?.message?.toLowerCase().includes('quota') ||
-                              err?.message?.toLowerCase().includes('limit');
-                              
-          if (isRateLimit && i < retries - 1) {
-            console.warn(`Gemini (${modelName}) rate limit atingido. Aguardando ${delayMs}ms...`);
-            await delay(delayMs);
+    let currentDelay = delayMs;
+    const model = genAI.getGenerativeModel({ model: modelName });
+
+    for (let i = 0; i < retries; i++) {
+      try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        if (text && text.trim().length > 0) {
+          return text;
+        }
+        throw new Error('Resposta vazia da IA');
+      } catch (err: any) {
+        lastError = err;
+
+        if (isOverloadError(err)) {
+          if (i < retries - 1) {
+            console.warn(`[Gemini] Modelo ${modelName} sobrecarregado (503). Aguardando ${currentDelay}ms...`);
+            await delay(currentDelay);
+            currentDelay += 1000;
             continue;
           }
-          // Se for erro de modelo inexistente (404), vai para o próximo modelo na lista
+          console.warn(`[Gemini] Modelo ${modelName} indisponível após ${retries} tentativas. Tentando próximo modelo...`);
           break;
         }
+
+        if (isRateLimitError(err)) {
+          if (i < retries - 1) {
+            console.warn(`[Gemini] Rate limit (429) em ${modelName}. Aguardando ${currentDelay}ms...`);
+            await delay(currentDelay);
+            currentDelay *= 2;
+            continue;
+          }
+          console.warn(`[Gemini] Cota esgotada em ${modelName}. Tentando próximo modelo...`);
+          break;
+        }
+
+        // Se for modelo não encontrado ou erro inesperado, tenta próximo da cadeia
+        break;
       }
-    } catch (err: any) {
-      lastError = err;
     }
   }
 
-  throw lastError || new Error('Falha ao obter resposta da API do Gemini.');
+  throw (
+    lastError ||
+    new Error('Todos os modelos Gemini estão temporariamente indisponíveis. Tente novamente em alguns instantes.')
+  );
 }
 
 export async function callGeminiJSON<T>(prompt: string): Promise<T> {

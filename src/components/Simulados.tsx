@@ -268,52 +268,25 @@ Por favor, faça um diagnóstico rápido do erro cometido pelo aluno. Explique d
         : bancaLower.includes('fcc') ? examplesByBanca.fcc
         : examplesByBanca.fgv;
 
-      const prompt = `Você é um professor especialista em concursos públicos brasileiros, com vasta experiência em bancas como Cebraspe/Cespe, FGV e FCC.
+      const prompt = `Gere ${total} questão(ões) de concurso público no formato ${promptType} para a banca "${editalInfo.banca || 'FGV/FCC/Cespe'}".
 
-Sua tarefa é gerar questões inéditas e de alto nível técnico no formato ${promptType} para a banca examinadora: "${editalInfo.banca || 'Padrão Profissional (FGV/FCC/Cespe)'}".
+DISTRIBUIÇÃO:
+${subjectsWithTopics.map((s: { disciplina: string; quantidade_questoes: number; topicos_base: string[] }) => `- ${s.quantidade_questoes}x ${s.disciplina} (tópicos: ${s.topicos_base.join(', ')})`).join('\n')}
 
-─── INSTRUÇÕES DE ESTILO ───
-Estilo da banca para esta geração: ${chooseExample.style}
+REGRAS:
+- Use legislação vigente, jurisprudência pacificada do STF/STJ e doutrina clássica.
+- Cada questão deve ter UMA resposta correta inequívoca.
+- Inclua explicação técnica com citação do dispositivo legal aplicável.
 
-Para referência, SIGA EXATAMENTE O NÍVEL DE DIFICULDADE E ESTRUTURA DESTE EXEMPLO REAL:
-Assunto: ${chooseExample.example.subject}
-Tópico: ${chooseExample.example.topic}
-Enunciado: "${chooseExample.example.text}"
-Alternativas: ${JSON.stringify(chooseExample.example.options)}
-Gabarito: ${chooseExample.example.correctIndex} (${chooseExample.example.options[chooseExample.example.correctIndex]})
-Explicação: ${chooseExample.example.explanation}
-
-─── REGRAS CRÍTICAS ───
-1. LEGISLAÇÃO: Para Direito, use a Constituição Federal vigente, leis secas e códigos. NUNCA invente leis ou artigos.
-2. JURISPRUDÊNCIA: Use entendimentos PACIFICADOS do STF (súmulas vinculantes, repercussão geral) e STJ (súmulas, recursos repetitivos). Prefira jurisprudência atual (2023-2026).
-3. PEGADINHAS REAIS: Modele as questões a partir de erros clássicos de concurseiros:
-   - Confundir prazos (ex: 5 vs 10 dias, decadência vs prescrição)
-   - Trocar sujeitos (ex: competência da União vs Estado vs Município)
-   - Esquecer exceções (ex: "salvo disposição em contrário")
-   - Inverter o ônus da prova
-   - Ignorar a hierarquia das normas
-4. RIGOR TÉCNICO: Cada questão deve ter UMA resposta inequívoca. Evite enunciados vagos ou dupla interpretação.
-5. CONHECIMENTOS REGIONAIS (AMAPÁ): Para temas de História e Geografia do Amapá, baseie-se estritamente em:
-   - Ciclo do Manganês (ICOMI): exploração na Serra do Navio (1957-1997)
-   - Criação do Território Federal do Amapá (1943) e elevação a Estado (1988)
-   - Limites: Oiapoque (N), Pará (S e O), Oceano Atlântico (L)
-   - População: ~900 mil hab. (IBGE 2024), Macapá como capital
-   NÃO alucine dados demográficos ou históricos.
-6. ATUALIZAÇÃO: Priorize a legislação e jurisprudência mais recentes. Se houver divergência doutrinária, indique o entendimento majoritário.
-
-─── DISTRIBUIÇÃO SOLICITADA ───
-${JSON.stringify(subjectsWithTopics, null, 2)}
-
-─── FORMATO DE SAÍDA ───
-RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO (SEM TEXTO ADICIONAL FORA DO JSON, SEM MARKDOWN, SEM EXPLICAÇÕES ANTES OU DEPOIS):
+RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO, SEM TEXTO FORA DO JSON:
 [
   {
-    "subject": "Nome exato da disciplina (igual ao informado acima)",
-    "topic": "Tópico específico com detalhe (ex: Art. 5º, XII - Inviolabilidade do sigilo de dados)",
-    "text": "Enunciado completo no estilo da banca alvo",
+    "subject": "Nome exato da disciplina",
+    "topic": "Tópico específico",
+    "text": "Enunciado completo",
     "options": ["Alternativa A", "Alternativa B", "Alternativa C", "Alternativa D"${isCespe ? '' : `, "Alternativa E"`}],
     "correctIndex": 0,
-    "explanation": "Explicação técnica CITANDO o dispositivo legal, súmula ou entendimento jurisprudencial aplicável. Seja didático."
+    "explanation": "Explicação técnica com dispositivo legal."
   }
 ]`;
 
