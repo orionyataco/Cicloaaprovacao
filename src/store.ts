@@ -124,6 +124,18 @@ export interface UserProfile {
   avatar: string | null;
 }
 
+export interface PomodoroConfig {
+  workMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  longBreakInterval: number;
+  soundEnabled: boolean;
+  autoStartBreaks: boolean;
+  autoStartPomodoros: boolean;
+  hasConfigured: boolean;
+  timerType: 'countdown' | 'stopwatch'; // 'countdown' = Regressiva, 'stopwatch' = Progressiva
+}
+
 export type NotificationType = 'follow' | 'flashcard' | 'calendar' | 'system';
 
 export interface AppNotification {
@@ -147,6 +159,7 @@ interface AppState {
   editalInfo: EditalInfo;
   scheduleConfig: ScheduleConfig;
   userProfile: UserProfile;
+  pomodoroConfig: PomodoroConfig;
   currentCycleIndex: number;
   activeTopicId: string | null;
   autoGenerateTopicId: string | null;
@@ -192,6 +205,7 @@ interface AppState {
   updateEditalInfo: (info: Partial<EditalInfo>) => void;
   updateScheduleConfig: (config: Partial<ScheduleConfig>) => void;
   updateUserProfile: (profile: Partial<UserProfile>) => void;
+  updatePomodoroConfig: (config: Partial<PomodoroConfig>) => void;
   setCurrentCycleIndex: (index: number) => void;
   followUser: (uid: string) => void;
   unfollowUser: (uid: string) => void;
@@ -246,6 +260,17 @@ export const useStore = create<AppState>()(
         birthDate: '',
         gender: '',
         avatar: null,
+      },
+      pomodoroConfig: {
+        workMinutes: 25,
+        shortBreakMinutes: 5,
+        longBreakMinutes: 15,
+        longBreakInterval: 4,
+        soundEnabled: true,
+        autoStartBreaks: false,
+        autoStartPomodoros: false,
+        hasConfigured: false,
+        timerType: 'countdown',
       },
       currentCycleIndex: 0,
       followingIds: [],
@@ -482,6 +507,10 @@ export const useStore = create<AppState>()(
 
       updateUserProfile: (profile) => set((state) => ({
         userProfile: { ...state.userProfile, ...profile }
+      })),
+
+      updatePomodoroConfig: (config) => set((state) => ({
+        pomodoroConfig: { ...state.pomodoroConfig, ...config }
       })),
 
       setCurrentCycleIndex: (index) => set({ currentCycleIndex: index }),

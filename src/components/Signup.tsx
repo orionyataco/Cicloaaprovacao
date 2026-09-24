@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Mail, Lock, User, UserPlus, CheckCircle2, BookOpen, GraduationCap, RefreshCw, ArrowLeft } from 'lucide-react';
+import { Mail, Lock, User, UserPlus, CheckCircle2, BookOpen, GraduationCap, RefreshCw, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { auth } from '@/lib/firebase';
+import { auth, isFirebaseConfigured } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { useStore } from '@/store';
 
@@ -25,6 +25,11 @@ export function Signup({ onSignup, onBackToLogin }: SignupProps) {
       setError("As senhas não coincidem!");
       return;
     }
+
+    if (!isFirebaseConfigured()) {
+      setError("Firebase não está conectado! O arquivo .env ainda contém valores de exemplo (sua_api_key). Configure com as chaves reais do Firebase Console ou use o modo 'EXPERIMENTAR SEM CADASTRO' na tela inicial.");
+      return;
+    }
     
     setIsLoading(true);
       try {
@@ -42,7 +47,11 @@ export function Signup({ onSignup, onBackToLogin }: SignupProps) {
       onSignup();
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Ocorreu um erro ao criar sua conta.");
+      if (err.code === 'auth/invalid-api-key' || err.code === 'auth/api-key-not-valid') {
+        setError("Chave do Firebase inválida no arquivo .env");
+      } else {
+        setError(err.message || "Ocorreu um erro ao criar sua conta.");
+      }
     } finally {
       setIsLoading(false);
     }

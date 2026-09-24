@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { auth, db } from '../lib/firebase';
+import { auth, db, isFirebaseConfigured } from '../lib/firebase';
 import { doc, getDoc, setDoc, collection, query, where, onSnapshot, limit, deleteDoc } from 'firebase/firestore';
 import { useStore } from '../store';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -19,6 +19,13 @@ export function useFirebaseSync() {
   // Listener de autenticação: carrega dados do Firestore
   // ────────────────────────────────────────────────
   useEffect(() => {
+    if (!isFirebaseConfigured()) {
+      console.warn('[Firebase] Credenciais não configuradas ou são placeholders no .env. Mantendo modo local/offline.');
+      setHasHydrated(true);
+      useStore.setState({ isHydrated: true });
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         if (useStore.getState().isDemoMode) {
@@ -207,7 +214,7 @@ export function useFirebaseSync() {
     // 2. A hidratação inicial já ocorreu (evita sobrescrever o banco com dados vazios ao iniciar)
     // 3. O usuário está autenticado no Firebase
     const user = auth.currentUser;
-    if (isHydrating.current || !hasHydrated || !store.isAuthenticated || store.isDemoMode || !user) {
+    if (!isFirebaseConfigured() || isHydrating.current || !hasHydrated || !store.isAuthenticated || store.isDemoMode || !user) {
       return;
     }
 

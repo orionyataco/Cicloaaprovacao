@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Mail, Lock, LogIn, CheckCircle2, BookOpen, GraduationCap, RefreshCw } from 'lucide-react';
+import { Mail, Lock, LogIn, CheckCircle2, BookOpen, GraduationCap, RefreshCw, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { auth } from '@/lib/firebase';
+import { auth, isFirebaseConfigured } from '@/lib/firebase';
 import { useStore } from '@/store';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
@@ -19,13 +19,23 @@ export function Login({ onLogin, onGotoSignup }: LoginProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!isFirebaseConfigured()) {
+      setError("Firebase não está conectado! O arquivo .env ainda contém valores de exemplo (sua_api_key). Preencha com as chaves reais do Firebase Console ou clique em 'EXPERIMENTAR SEM CADASTRO'.");
+      return;
+    }
+
     setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
       onLogin();
     } catch (err: any) {
       console.error(err);
-      setError("E-mail ou senha inválidos.");
+      if (err.code === 'auth/invalid-api-key' || err.code === 'auth/api-key-not-valid') {
+        setError("Chave do Firebase inválida. Verifique seu arquivo .env");
+      } else {
+        setError("E-mail ou senha inválidos.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -69,6 +79,21 @@ export function Login({ onLogin, onGotoSignup }: LoginProps) {
         {/* Login Card */}
         <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 p-8 rounded-3xl shadow-2xl relative overflow-hidden group/card">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-blue-600" />
+          
+          {!isFirebaseConfigured() && (
+            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-300 text-xs text-left flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-200">Firebase não conectado</p>
+                <p className="mt-1 text-amber-300/80 leading-relaxed">
+                  O arquivo <code className="bg-amber-950/60 px-1.5 py-0.5 rounded text-amber-200 font-mono">.env</code> contém credenciais de exemplo (<code className="bg-amber-950/60 px-1.5 py-0.5 rounded text-amber-200 font-mono">sua_api_key</code>).
+                </p>
+                <p className="mt-2 text-amber-200 font-medium">
+                  👉 Para usar o app localmente agora, clique em <strong>"EXPERIMENTAR SEM CADASTRO"</strong> abaixo.
+                </p>
+              </div>
+            </div>
+          )}
           
           <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
             <div className="space-y-2">

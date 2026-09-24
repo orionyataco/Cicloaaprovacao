@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store';
-import { db, auth } from '@/lib/firebase';
+import { db, auth, isFirebaseConfigured } from '@/lib/firebase';
 import { collection, query, where, getDocs, limit, orderBy, addDoc } from 'firebase/firestore';
-import { Search, UserPlus, UserMinus, Trophy, Target, Clock, BookOpen, ChevronRight, UserCircle, X, LayoutDashboard, Target as TargetIcon, Globe, Plus, Calendar } from 'lucide-react';
+import { Search, UserPlus, UserMinus, Trophy, Target, Clock, BookOpen, ChevronRight, UserCircle, X, LayoutDashboard, Target as TargetIcon, Globe, Plus, Calendar, AlertTriangle } from 'lucide-react';
 import { cn, fetchDocsByIds } from '@/lib/utils';
 import { startOfWeek, parseISO } from 'date-fns';
 
@@ -72,7 +72,7 @@ export function Rankings() {
   // Fetch profiles of users we follow
   useEffect(() => {
     const fetchFriends = async () => {
-      if (followingIds.length === 0) {
+      if (!isFirebaseConfigured() || followingIds.length === 0) {
         setFriendsProfiles([]);
         return;
       }
@@ -92,7 +92,7 @@ export function Rankings() {
   // Fetch profiles for custom weekly ranking
   useEffect(() => {
     const fetchWeekly = async () => {
-      if (weeklyRankingFriendIds.length === 0) {
+      if (!isFirebaseConfigured() || weeklyRankingFriendIds.length === 0) {
         setWeeklyProfiles([]);
         return;
       }
@@ -114,6 +114,7 @@ export function Rankings() {
   // Fetch Global Top 5 to show active users
   useEffect(() => {
     const fetchGlobal = async () => {
+      if (!isFirebaseConfigured()) return;
       setLoadingGlobal(true);
       try {
         const q = query(
