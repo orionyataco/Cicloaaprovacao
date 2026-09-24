@@ -115,23 +115,37 @@ export function Timer() {
     return true;
   };
 
-  // Efeito principal do Cronômetro (Tick a cada 1 segundo)
+  const lastTickRef = useRef<number>(Date.now());
+  const modeRef = useRef(mode);
+
+  // Mantenha a referência do modo sempre atualizada sem causar re-renders
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
+  // Efeito principal do Cronômetro (Tick preciso baseado em tempo real)
   useEffect(() => {
     if (isRunning) {
+      lastTickRef.current = Date.now();
       intervalRef.current = setInterval(() => {
-        setSecondsLeft((prev) => {
-          if (prev <= 1) {
-            handlePhaseCompletion();
-            return 0;
-          }
-          return prev - 1;
-        });
+        const now = Date.now();
+        const deltaMs = now - lastTickRef.current;
+        const deltaSecs = Math.floor(deltaMs / 1000);
 
-        // Se estiver em modo de foco, acumula tempo real estudado
-        if (mode === 'work') {
-          setAccumulatedWorkSeconds((prev) => prev + 1);
+        if (deltaSecs >= 1) {
+          lastTickRef.current += deltaSecs * 1000;
+
+          setSecondsLeft((prev) => {
+            const next = prev - deltaSecs;
+            return next <= 0 ? 0 : next;
+          });
+
+          // Se estiver em modo de foco, acumula tempo real estudado
+          if (modeRef.current === 'work') {
+            setAccumulatedWorkSeconds((prev) => prev + deltaSecs);
+          }
         }
-      }, 1000);
+      }, 500); // Frequência de 500ms compensa o background throttling
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
@@ -139,7 +153,7 @@ export function Timer() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning, mode, currentCycle, pomodoroConfig, activeTopicId, accumulatedWorkSeconds]);
+  }, [isRunning]);
 
   // Ação executada quando uma fase do Pomodoro zera (00:00)
   const handlePhaseCompletion = () => {
@@ -150,7 +164,7 @@ export function Timer() {
     if (mode === 'work') {
       // Salva sessão de estudos no histórico
       const currentTopicId = activeTopicId;
-      const totalSecondsToLog = accumulatedWorkSeconds + 1;
+      const totalSecondsToLog = accumulatedWorkSeconds;
       
       if (currentTopicId && totalSecondsToLog > 0) {
         logStudySession(currentTopicId, totalSecondsToLog);
@@ -180,6 +194,14 @@ export function Timer() {
       setIsPaused(!pomodoroConfig.autoStartPomodoros);
     }
   };
+
+  // Dispara a conclusão de fase quando timer zera
+  useEffect(() => {
+    if (isRunning && secondsLeft === 0) {
+      handlePhaseCompletion();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secondsLeft, isRunning]);
 
   // Play / Resume
   const handleStart = () => {
