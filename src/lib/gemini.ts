@@ -23,12 +23,13 @@ export function hasValidGeminiKey(): boolean {
   }
 }
 
-// Modelos oficiais ordenados por estabilidade e velocidade
+// Modelos estáveis ordenados por preferência e velocidade (atualizado set/2026)
 const CANDIDATE_MODELS = [
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-  'gemini-1.5-flash-8b',
-  'gemini-2.0-flash-lite',
+  'gemini-3.5-flash',       // Estável, rápido, alto throughput
+  'gemini-3.5-flash-lite',  // Estável, mais econômico
+  'gemini-3.8-flash',       // Mais inteligente, nova geração
+  'gemini-2.5-flash',       // Fallback legado, ainda disponível
+  'gemini-2.5-flash-lite',  // Fallback legado
 ];
 
 async function delay(ms: number) {
