@@ -258,20 +258,21 @@ export default function App() {
         )}
 
         {/* Topbar */}
-        <header className="h-20 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between px-4 lg:px-8 sticky top-0 z-10">
-          <div className="flex items-center gap-3 lg:gap-4">
+        <header className="h-16 sm:h-20 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between px-2.5 sm:px-4 lg:px-8 sticky top-0 z-20 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 min-w-0 shrink">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 hover:bg-zinc-900 rounded-lg lg:hidden text-zinc-400"
+              className="p-1.5 sm:p-2 hover:bg-zinc-900 rounded-lg lg:hidden text-zinc-400 shrink-0 compact-btn"
+              title="Abrir Menu"
             >
-              <Menu className="w-6 h-6" />
+              <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
-            <div className="hidden sm:block w-2 h-8 bg-emerald-500 rounded-full" />
-            <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-zinc-100 truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
+            <div className="hidden sm:block w-2 h-8 bg-emerald-500 rounded-full shrink-0" />
+            <h2 className="text-sm sm:text-lg lg:text-xl font-semibold text-zinc-100 truncate max-w-[90px] xs:max-w-[140px] sm:max-w-none">
               {currentView === 'account' ? 'Minha Conta' : navItems.find(i => i.id === currentView)?.label}
             </h2>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-4">
+          <div className="flex items-center gap-1 sm:gap-2.5 lg:gap-4 shrink-0 min-w-0">
             <NotificationCenter />
             <Timer />
           </div>

@@ -300,10 +300,10 @@ export function Timer() {
   const activeSubject = activeTopic ? subjects.find((s) => s.id === activeTopic.subjectId) : null;
 
   return (
-    <div className="relative">
+    <div className="relative shrink-0">
       {/* Container Principal Compacto da Barra do Cronômetro Pomodoro */}
       <div className={cn(
-        "flex items-center gap-2 sm:gap-3 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full border shadow-xl backdrop-blur-md transition-all duration-300",
+        "flex items-center gap-1.5 xs:gap-2 sm:gap-2.5 md:gap-3 px-2 py-1 xs:px-2.5 xs:py-1.5 sm:px-3 sm:py-1.5 md:px-4 md:py-2 rounded-full border shadow-xl backdrop-blur-md transition-all duration-300 shrink-0",
         mode === 'work' && isRunning && "bg-emerald-950/40 border-emerald-500/40 text-emerald-300 ring-1 ring-emerald-500/20",
         mode === 'work' && isPaused && "bg-amber-950/40 border-amber-500/40 text-amber-300 ring-1 ring-amber-500/20",
         mode === 'work' && !isRunning && !isPaused && "bg-zinc-900/90 border-zinc-800 text-zinc-100",
@@ -312,19 +312,19 @@ export function Timer() {
       )}>
         
         {/* Ícone Indicador de Modo */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           {mode === 'work' ? (
             <Target className={cn(
-              "w-4 h-4 sm:w-5 sm:h-5 transition-transform",
+              "w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 transition-transform",
               isRunning ? "text-emerald-400 animate-pulse" : isPaused ? "text-amber-400" : "text-zinc-400"
             )} />
           ) : (
-            <Coffee className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 animate-bounce" />
+            <Coffee className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-cyan-400 animate-bounce" />
           )}
 
-          {/* Badge do Modo (Foco / Pausa) */}
+          {/* Badge do Modo (Foco / Pausa) - visível em telas grandes */}
           <span className={cn(
-            "hidden md:inline-block text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border",
+            "hidden lg:inline-block text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border",
             mode === 'work' && "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
             mode === 'shortBreak' && "bg-cyan-500/10 border-cyan-500/30 text-cyan-400",
             mode === 'longBreak' && "bg-purple-500/10 border-purple-500/30 text-purple-400"
@@ -335,35 +335,35 @@ export function Timer() {
 
         {/* Display Digital do Tempo (Regressivo ou Progressivo) */}
         <div 
-          className="font-mono text-base sm:text-xl font-bold tracking-wider text-center min-w-[56px] sm:min-w-[70px]"
+          className="font-mono text-xs xs:text-sm sm:text-base md:text-xl font-bold tracking-tight sm:tracking-wider text-center min-w-[42px] xs:min-w-[48px] sm:min-w-[62px] md:min-w-[70px] shrink-0"
           title={pomodoroConfig.timerType === 'stopwatch' ? 'Contagem Progressiva (00:00 -> Meta)' : 'Contagem Regressiva (Meta -> 00:00)'}
         >
           {formatSeconds(displaySeconds)}
         </div>
 
         {/* Indicador do Tópico de Estudo Selecionado */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => setIsTopicDropdownOpen(!isTopicDropdownOpen)}
-            className="flex items-center gap-1.5 text-xs text-zinc-300 hover:text-white max-w-[130px] sm:max-w-[190px] truncate bg-zinc-800/60 hover:bg-zinc-800 px-2.5 py-1 rounded-full border border-zinc-700/50 transition-all text-left"
+            className="flex items-center gap-1 text-[10px] xs:text-xs text-zinc-300 hover:text-white max-w-[55px] xs:max-w-[90px] sm:max-w-[140px] md:max-w-[190px] truncate bg-zinc-800/60 hover:bg-zinc-800 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-full border border-zinc-700/50 transition-all text-left compact-btn shrink-0"
             title={activeTopic ? `${activeSubject?.name || ''}: ${activeTopic.name}` : 'Selecionar Matéria/Tópico'}
           >
             {activeSubject && (
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: activeSubject.color }} />
+              <span className="w-1.5 h-1.5 xs:w-2 xs:h-2 rounded-full shrink-0" style={{ backgroundColor: activeSubject.color }} />
             )}
             <span className="truncate font-medium">
-              {activeTopic ? activeTopic.name : 'Selecionar Tópico'}
+              {activeTopic ? activeTopic.name : 'Tópico'}
             </span>
-            <ChevronDown className="w-3 h-3 shrink-0 text-zinc-400 ml-0.5" />
+            <ChevronDown className="w-2.5 h-2.5 xs:w-3 xs:h-3 shrink-0 text-zinc-400 ml-0.5" />
           </button>
 
-          {/* Dropdown para escolher o Tópico de Estudo diretamente da barra */}
+          {/* Dropdown para escolher o Tópico de Estudo diretamente da barra (alinhado à direita para nunca sair da tela mobile) */}
           {isTopicDropdownOpen && (
-            <div className="absolute top-full left-0 mt-2 w-64 max-h-72 overflow-y-auto bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150 custom-scrollbar">
+            <div className="absolute top-full right-0 sm:left-auto mt-2 w-64 max-w-[calc(100vw-24px)] max-h-72 overflow-y-auto bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150 custom-scrollbar">
               <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
                 <span>Escolher Tópico</span>
-                <button onClick={() => setIsTopicDropdownOpen(false)} className="text-zinc-500 hover:text-zinc-300">
-                  <X className="w-3 h-3" />
+                <button onClick={() => setIsTopicDropdownOpen(false)} className="text-zinc-500 hover:text-zinc-300 compact-btn">
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
 
@@ -383,7 +383,7 @@ export function Timer() {
                         setIsTopicDropdownOpen(false);
                       }}
                       className={cn(
-                        "w-full text-left p-2 rounded-xl text-xs transition-colors flex items-center gap-2 mb-1",
+                        "w-full text-left p-2 rounded-xl text-xs transition-colors flex items-center gap-2 mb-1 compact-btn",
                         isSelected ? "bg-emerald-500/20 text-emerald-300 font-bold" : "hover:bg-zinc-800 text-zinc-300"
                       )}
                     >
@@ -405,30 +405,30 @@ export function Timer() {
           {!isRunning && !isPaused && (
             <button
               onClick={handleStart}
-              className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-md transition-all hover:scale-105 active:scale-95"
+              className="flex items-center justify-center w-6 h-6 xs:w-7 xs:h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-md transition-all hover:scale-105 active:scale-95 compact-btn shrink-0"
               title="Iniciar Pomodoro"
             >
-              <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current ml-0.5" />
+              <Play className="w-3 h-3 xs:w-3.5 xs:h-3.5 sm:w-4 sm:h-4 fill-current ml-0.5" />
             </button>
           )}
 
           {isRunning && (
             <button
               onClick={handlePause}
-              className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md transition-all hover:scale-105 active:scale-95"
+              className="flex items-center justify-center w-6 h-6 xs:w-7 xs:h-7 sm:w-8 sm:h-8 rounded-full bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md transition-all hover:scale-105 active:scale-95 compact-btn shrink-0"
               title="Pausar Cronômetro"
             >
-              <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
+              <Pause className="w-3 h-3 xs:w-3.5 xs:h-3.5 sm:w-4 sm:h-4 fill-current" />
             </button>
           )}
 
           {isPaused && (
             <button
               onClick={handleResume}
-              className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-md transition-all hover:scale-105 active:scale-95 animate-pulse"
+              className="flex items-center justify-center w-6 h-6 xs:w-7 xs:h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-md transition-all hover:scale-105 active:scale-95 animate-pulse compact-btn shrink-0"
               title="Continuar Tempo"
             >
-              <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current ml-0.5" />
+              <Play className="w-3 h-3 xs:w-3.5 xs:h-3.5 sm:w-4 sm:h-4 fill-current ml-0.5" />
             </button>
           )}
 
@@ -436,10 +436,10 @@ export function Timer() {
           {(isRunning || isPaused || accumulatedWorkSeconds > 0) && (
             <button
               onClick={handleFinishSession}
-              className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors"
+              className="flex items-center justify-center w-6 h-6 xs:w-7 xs:h-7 sm:w-8 sm:h-8 rounded-full bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors compact-btn shrink-0"
               title="Concluir Estudo e Salvar Horas"
             >
-              <Square className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-current" />
+              <Square className="w-2.5 h-2.5 xs:w-3 xs:h-3 sm:w-3.5 sm:h-3.5 fill-current" />
             </button>
           )}
 
@@ -447,10 +447,10 @@ export function Timer() {
           {(isRunning || isPaused) && (
             <button
               onClick={handleSkipPhase}
-              className="hidden sm:flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+              className="hidden md:flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors compact-btn shrink-0"
               title="Pular para Próxima Fase"
             >
-              <SkipForward className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <SkipForward className="w-3.5 h-3.5" />
             </button>
           )}
 
@@ -463,10 +463,10 @@ export function Timer() {
               });
               setIsSettingsOpen(true);
             }}
-            className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            className="flex items-center justify-center w-6 h-6 xs:w-7 xs:h-7 sm:w-8 sm:h-8 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors compact-btn shrink-0"
             title="Configurar Pomodoro"
           >
-            <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <Settings className="w-3 h-3 xs:w-3.5 xs:h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
       </div>

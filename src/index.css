@@ -51,11 +51,17 @@ body {
   display: none;
 }
 
-/* Melhorias de toque para dispositivos móveis */
+/* Melhorias de toque para dispositivos móveis (exceto botões e controles compactos) */
 @media (hover: none) and (pointer: coarse) {
-  button, a, [role="button"] {
+  button:not(.compact-btn):not([data-compact="true"]), 
+  a:not(.compact-btn):not([data-compact="true"]), 
+  [role="button"]:not(.compact-btn):not([data-compact="true"]) {
     min-height: 44px;
   }
+}
+
+.compact-btn {
+  min-height: unset;
 }
 
 /* Suporte a safe-area (notch/barra home do iOS) */

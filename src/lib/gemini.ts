@@ -29,6 +29,7 @@ const CANDIDATE_MODELS = [
   'gemini-3.5-flash-lite',  // Estável, mais econômico
   'gemini-3.8-flash',       // Mais inteligente, nova geração
   'gemini-2.5-flash',       // Fallback legado, ainda disponível
+  'gemini-2.5-pro',
   'gemini-2.5-flash-lite',  // Fallback legado
 ];
 

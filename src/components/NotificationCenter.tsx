@@ -56,20 +56,21 @@ export function NotificationCenter() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative shrink-0">
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 hover:bg-zinc-900 rounded-xl transition-all group"
+        className="relative p-1.5 sm:p-2 hover:bg-zinc-900 rounded-xl transition-all group shrink-0 compact-btn"
+        title="Notificações"
       >
         {unreadCount > 0 ? (
           <>
-            <BellDot className="w-6 h-6 text-emerald-400 animate-pulse" />
+            <BellDot className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400 animate-pulse" />
             <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-2 ring-zinc-950">
               {unreadCount}
             </span>
           </>
         ) : (
-          <Bell className="w-6 h-6 text-zinc-500 group-hover:text-zinc-300" />
+          <Bell className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-500 group-hover:text-zinc-300" />
         )}
       </button>
 
@@ -79,7 +80,7 @@ export function NotificationCenter() {
             className="fixed inset-0 z-40 bg-transparent" 
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="absolute right-0 mt-3 w-80 max-w-[calc(100vw-24px)] sm:w-96 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
               <div className="flex items-center gap-4">
                 <h3 className="font-bold text-zinc-100 flex items-center gap-2">
