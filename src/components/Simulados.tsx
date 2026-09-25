@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStore } from '@/store';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, ChevronDown, AlertTriangle, Trash2, BrainCircuit, Share2, Users, Search, ExternalLink, BookOpen, BarChart2 } from 'lucide-react';
+import { Trophy, Plus, X, Brain, Loader2, CheckCircle2, ChevronRight, ChevronDown, AlertTriangle, Trash2, BrainCircuit, Share2, Users, Search, ExternalLink, BookOpen, BarChart2, Scissors } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc, limit, setDoc } from 'firebase/firestore';
 import { cn, fetchDocsByIds } from '@/lib/utils';
@@ -119,6 +119,27 @@ Por favor, faça um diagnóstico rápido do erro cometido pelo aluno. Explique d
   const [examFinished, setExamFinished] = useState(false);
   const [examStartTime, setExamStartTime] = useState<number|null>(null);
   const [activeExamCategory, setActiveExamCategory] = useState<'simulado'|'questoes'>('simulado');
+
+  // Estado do modo tesourinha: quais questões estão com o modo ativo e quais alternativas estão riscadas
+  const [scissorModeActive, setScissorModeActive] = useState<Record<number, boolean>>({});
+  const [crossedOptions, setCrossedOptions] = useState<Record<string, boolean>>({});
+
+  const toggleScissorMode = (qIndex: number) => {
+    setScissorModeActive(prev => ({ ...prev, [qIndex]: !prev[qIndex] }));
+  };
+
+  const toggleCrossOption = (qIndex: number, optIndex: number) => {
+    const key = `${qIndex}-${optIndex}`;
+    setCrossedOptions(prev => ({ ...prev, [key]: !prev[key] }));
+    // Se estiver riscando, desmarca a seleção dessa alternativa se estava marcada
+    if (!crossedOptions[key] && userAnswers[qIndex] === optIndex) {
+      setUserAnswers(prev => {
+        const next = { ...prev };
+        delete next[qIndex];
+        return next;
+      });
+    }
+  };
 
   // Sharing State
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -301,6 +322,8 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO, SEM TEXTO FORA DO JSON:
         setActiveExamType('ai');
         setUserAnswers({});
         setExamFinished(false);
+        setScissorModeActive({});
+        setCrossedOptions({});
         setExamStartTime(Date.now());
         setIsGeneratingModalOpen(false);
       } else {
@@ -803,13 +826,37 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO, SEM TEXTO FORA DO JSON:
         <div className="space-y-6 md:space-y-12">
           {activeExam.map((q, qIndex) => (
             <div key={qIndex} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 md:p-8">
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3 mb-4 flex-wrap">
                 <span className="bg-zinc-800 text-zinc-300 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
                   Questão {qIndex + 1}
                 </span>
                 <span className="text-sm text-emerald-400 font-medium">{q.subject}</span>
                 <span className="text-sm text-zinc-500">• {q.topic}</span>
+                {!examFinished && (
+                  <button
+                    onClick={() => toggleScissorMode(qIndex)}
+                    title={scissorModeActive[qIndex] ? 'Desativar modo eliminação' : 'Ativar modo eliminação (riscar alternativas erradas)'}
+                    className={cn(
+                      "ml-auto flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border transition-all",
+                      scissorModeActive[qIndex]
+                        ? "bg-orange-500/20 border-orange-500/50 text-orange-400 shadow-sm shadow-orange-500/10"
+                        : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-orange-400 hover:border-orange-500/30"
+                    )}
+                  >
+                    <Scissors className="w-3.5 h-3.5" />
+                    {scissorModeActive[qIndex] ? 'Eliminando...' : 'Eliminar'}
+                  </button>
+                )}
               </div>
+
+              {scissorModeActive[qIndex] && !examFinished && (
+                <div className="mb-4 px-3 py-2 bg-orange-500/5 border border-orange-500/20 rounded-lg flex items-center gap-2">
+                  <Scissors className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
+                  <p className="text-[11px] text-orange-400/80">
+                    <span className="font-bold">Modo eliminação ativo:</span> clique nas alternativas que você considera <span className="font-bold">erradas</span> para riscá-las.
+                  </p>
+                </div>
+              )}
               
               <p className="text-lg text-zinc-100 mb-8 leading-relaxed whitespace-pre-wrap">{q.text}</p>
               
@@ -818,6 +865,8 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO, SEM TEXTO FORA DO JSON:
                   const isSelected = userAnswers[qIndex] === optIndex;
                   const isCorrect = q.correctIndex === optIndex;
                   const showResult = examFinished;
+                  const isCrossed = !!crossedOptions[`${qIndex}-${optIndex}`];
+                  const isScissorActive = scissorModeActive[qIndex] && !examFinished;
                   
                   let optionClass = "border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-300";
                   
@@ -825,32 +874,54 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO, SEM TEXTO FORA DO JSON:
                     if (isCorrect) optionClass = "border-emerald-500/50 bg-emerald-500/10 text-emerald-200";
                     else if (isSelected && !isCorrect) optionClass = "border-red-500/50 bg-red-500/10 text-red-200";
                     else optionClass = "border-zinc-800 bg-zinc-900/50 text-zinc-500 opacity-50";
+                  } else if (isCrossed) {
+                    optionClass = "border-zinc-800/50 bg-zinc-900/20 text-zinc-600 opacity-60";
                   } else if (isSelected) {
                     optionClass = "border-emerald-500 bg-emerald-500/10 text-emerald-200";
+                  } else if (isScissorActive) {
+                    optionClass = "border-zinc-700 bg-zinc-900/50 hover:bg-orange-500/5 hover:border-orange-500/30 text-zinc-300 cursor-pointer";
                   }
+
+                  const handleOptionClick = () => {
+                    if (examFinished) return;
+                    if (isScissorActive) {
+                      toggleCrossOption(qIndex, optIndex);
+                    } else if (!isCrossed) {
+                      setUserAnswers(prev => ({ ...prev, [qIndex]: optIndex }));
+                    }
+                  };
 
                   return (
                     <button
                       key={optIndex}
                       disabled={examFinished}
-                      onClick={() => setUserAnswers(prev => ({ ...prev, [qIndex]: optIndex }))}
+                      onClick={handleOptionClick}
                       className={cn(
-                        "w-full text-left p-4 rounded-xl border transition-all flex items-start gap-4",
+                        "w-full text-left p-4 rounded-xl border transition-all flex items-start gap-4 relative",
                         optionClass,
-                        !examFinished && "cursor-pointer"
+                        !examFinished && !isCrossed && "cursor-pointer",
+                        isCrossed && !examFinished && "cursor-pointer"
                       )}
                     >
                       <div className={cn(
-                        "w-6 h-6 rounded-full border flex items-center justify-center flex-shrink-0 mt-0.5",
+                        "w-6 h-6 rounded-full border flex items-center justify-center flex-shrink-0 mt-0.5 transition-all",
                         showResult && isCorrect ? "border-emerald-500 bg-emerald-500 text-zinc-900" :
                         showResult && isSelected && !isCorrect ? "border-red-500 bg-red-500 text-zinc-900" :
-                        isSelected ? "border-emerald-500 bg-emerald-500 text-zinc-900" : "border-zinc-600"
+                        isSelected ? "border-emerald-500 bg-emerald-500 text-zinc-900" :
+                        isCrossed ? "border-zinc-700 bg-zinc-800/50" : "border-zinc-600"
                       )}>
                         {showResult && isCorrect ? <CheckCircle2 className="w-4 h-4" /> : 
-                         showResult && isSelected && !isCorrect ? <X className="w-4 h-4" /> : 
+                         showResult && isSelected && !isCorrect ? <X className="w-4 h-4" /> :
+                         isCrossed ? <X className="w-3 h-3 text-zinc-600" /> :
                          String.fromCharCode(65 + optIndex)}
                       </div>
-                      <span className="leading-relaxed">{opt}</span>
+                      <span className={cn(
+                        "leading-relaxed transition-all",
+                        isCrossed && !showResult && "line-through decoration-zinc-500 decoration-2"
+                      )}>{opt}</span>
+                      {isCrossed && !showResult && (
+                        <span className="ml-auto flex-shrink-0 text-[10px] text-orange-500/60 font-bold uppercase tracking-widest self-center">Eliminada</span>
+                      )}
                     </button>
                   );
                 })}
@@ -1017,6 +1088,8 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO, SEM TEXTO FORA DO JSON:
                         setActiveSharedId(shared.id);
                         setActiveSharedSenderUid(shared.fromUid);
                         setUserAnswers({});
+                        setScissorModeActive({});
+                        setCrossedOptions({});
                         setExamStartTime(Date.now());
                         setActiveExamCategory('questoes');
                       }}
