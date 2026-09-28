@@ -88,6 +88,17 @@ export function useFirebaseSync() {
                 userProfile: remoteData.userProfile ?? {
                   name: 'Estudante', username: '', bio: '', birthDate: '', gender: '', avatar: null
                 },
+                pomodoroConfig: remoteData.pomodoroConfig ?? {
+                  workMinutes: 25,
+                  shortBreakMinutes: 5,
+                  longBreakMinutes: 15,
+                  longBreakInterval: 4,
+                  soundEnabled: true,
+                  autoStartBreaks: false,
+                  autoStartPomodoros: false,
+                  hasConfigured: false,
+                  timerType: 'countdown',
+                },
                 followingIds: remoteData.followingIds ?? [],
                 weeklyRankingFriendIds: remoteData.weeklyRankingFriendIds ?? [],
                 customRankingStartDate: remoteData.customRankingStartDate ?? null,
@@ -348,6 +359,7 @@ export function useFirebaseSync() {
     store.editalInfo, 
     store.scheduleConfig, 
     store.userProfile, 
+    store.pomodoroConfig,
     store.currentCycleIndex,
     store.followingIds,
     store.weeklyRankingFriendIds,

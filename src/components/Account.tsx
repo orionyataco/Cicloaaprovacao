@@ -1,23 +1,76 @@
-import React, { useState, useRef } from 'react';
-import { useStore } from '@/store';
-import { User, Trash2, Save, AlertTriangle, ShieldCheck, Camera, X as CloseIcon, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useStore, PomodoroConfig } from '@/store';
+import { 
+  User, 
+  Trash2, 
+  Save, 
+  AlertTriangle, 
+  ShieldCheck, 
+  Camera, 
+  X as CloseIcon, 
+  Loader2,
+  Timer as TimerIcon,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Volume2,
+  VolumeX,
+  Check
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { storage, auth, db } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { doc, deleteDoc } from 'firebase/firestore';
 
 export function Account() {
-  const { userProfile, updateUserProfile, resetAllData } = useStore();
+  const { userProfile, updateUserProfile, pomodoroConfig, updatePomodoroConfig, resetAllData } = useStore();
   const [formData, setFormData] = useState(userProfile);
+  const [pomodoroForm, setPomodoroForm] = useState<PomodoroConfig>(pomodoroConfig);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingPomodoro, setIsSavingPomodoro] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setFormData(userProfile);
+  }, [userProfile]);
+
+  useEffect(() => {
+    setPomodoroForm(pomodoroConfig);
+  }, [pomodoroConfig]);
+
+  const handleSavePomodoro = () => {
+    setIsSavingPomodoro(true);
+    const updated: PomodoroConfig = {
+      ...pomodoroForm,
+      workMinutes: Math.max(1, Math.min(120, Number(pomodoroForm.workMinutes) || 25)),
+      shortBreakMinutes: Math.max(1, Math.min(60, Number(pomodoroForm.shortBreakMinutes) || 5)),
+      longBreakMinutes: Math.max(1, Math.min(90, Number(pomodoroForm.longBreakMinutes) || 15)),
+      longBreakInterval: Math.max(1, Math.min(12, Number(pomodoroForm.longBreakInterval) || 4)),
+      timerType: pomodoroForm.timerType || 'countdown',
+      hasConfigured: true,
+    };
+    updatePomodoroConfig(updated);
+    setTimeout(() => {
+      setIsSavingPomodoro(false);
+      alert('Configuração do Pomodoro salva com sucesso no seu perfil!');
+    }, 300);
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
       await updateUserProfile(formData);
-      alert('Perfil atualizado com sucesso!');
+      updatePomodoroConfig({
+        ...pomodoroForm,
+        workMinutes: Math.max(1, Math.min(120, Number(pomodoroForm.workMinutes) || 25)),
+        shortBreakMinutes: Math.max(1, Math.min(60, Number(pomodoroForm.shortBreakMinutes) || 5)),
+        longBreakMinutes: Math.max(1, Math.min(90, Number(pomodoroForm.longBreakMinutes) || 15)),
+        longBreakInterval: Math.max(1, Math.min(12, Number(pomodoroForm.longBreakInterval) || 4)),
+        timerType: pomodoroForm.timerType || 'countdown',
+        hasConfigured: true,
+      });
+      alert('Perfil e configurações salvos com sucesso!');
     } catch (err) {
       console.error(err);
       alert('Erro ao atualizar perfil.');
@@ -302,6 +355,178 @@ export function Account() {
               >
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+            </div>
+          </div>
+
+          {/* Pomodoro Settings Card */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                  <TimerIcon className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-zinc-100">Configuração do Pomodoro</h2>
+                  <p className="text-xs text-zinc-400">Configure seus tempos de foco e descanso salvos no seu perfil</p>
+                </div>
+              </div>
+              <span className="text-[11px] px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full font-medium flex items-center gap-1">
+                <Check className="w-3 h-3" /> Salva no Perfil
+              </span>
+            </div>
+
+            {/* SELEÇÃO DO TIPO DE CONTAGEM */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                Modo de Contagem do Tempo
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPomodoroForm({ ...pomodoroForm, timerType: 'countdown' })}
+                  className={cn(
+                    "flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all",
+                    pomodoroForm.timerType === 'countdown'
+                      ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300 ring-1 ring-emerald-500/30"
+                      : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                  )}
+                >
+                  <ArrowDownCircle className={cn(
+                    "w-5 h-5 shrink-0",
+                    pomodoroForm.timerType === 'countdown' ? "text-emerald-400" : "text-zinc-500"
+                  )} />
+                  <div>
+                    <div className="text-xs font-bold">Regressiva</div>
+                    <div className="text-[10px] text-zinc-500 leading-tight mt-0.5">Tempo decresce (ex: 25:00 ➔ 00:00)</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPomodoroForm({ ...pomodoroForm, timerType: 'stopwatch' })}
+                  className={cn(
+                    "flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all",
+                    pomodoroForm.timerType === 'stopwatch'
+                      ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300 ring-1 ring-emerald-500/30"
+                      : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                  )}
+                >
+                  <ArrowUpCircle className={cn(
+                    "w-5 h-5 shrink-0",
+                    pomodoroForm.timerType === 'stopwatch' ? "text-emerald-400" : "text-zinc-500"
+                  )} />
+                  <div>
+                    <div className="text-xs font-bold">Progressiva</div>
+                    <div className="text-[10px] text-zinc-500 leading-tight mt-0.5">Tempo cresce (ex: 00:00 ➔ 25:00)</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Ajuste de Minutos */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                  🎯 Foco (Min)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="120"
+                  value={pomodoroForm.workMinutes}
+                  onChange={(e) => setPomodoroForm({ ...pomodoroForm, workMinutes: Number(e.target.value) })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-center text-sm font-bold text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                  ☕ Pausa Curta (Min)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={pomodoroForm.shortBreakMinutes}
+                  onChange={(e) => setPomodoroForm({ ...pomodoroForm, shortBreakMinutes: Number(e.target.value) })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-center text-sm font-bold text-zinc-100 focus:outline-none focus:border-cyan-500 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                  🌴 Pausa Longa (Min)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="90"
+                  value={pomodoroForm.longBreakMinutes}
+                  onChange={(e) => setPomodoroForm({ ...pomodoroForm, longBreakMinutes: Number(e.target.value) })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-center text-sm font-bold text-zinc-100 focus:outline-none focus:border-purple-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* Ciclos até Pausa Longa */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                Ciclos de Foco até Pausa Longa
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="12"
+                value={pomodoroForm.longBreakInterval}
+                onChange={(e) => setPomodoroForm({ ...pomodoroForm, longBreakInterval: Number(e.target.value) })}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm font-bold text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+              <p className="text-[10px] text-zinc-500">
+                A cada {pomodoroForm.longBreakInterval} blocos de foco completados, o cronômetro ativará uma pausa longa de {pomodoroForm.longBreakMinutes} minutos.
+              </p>
+            </div>
+
+            {/* Aviso Sonoro */}
+            <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {pomodoroForm.soundEnabled ? (
+                  <Volume2 className="w-5 h-5 text-emerald-400" />
+                ) : (
+                  <VolumeX className="w-5 h-5 text-zinc-500" />
+                )}
+                <div>
+                  <span className="text-xs font-semibold text-zinc-200 block">Sinal Sonoro</span>
+                  <span className="text-[10px] text-zinc-500">Tocar som suave ao término de cada fase</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPomodoroForm({ ...pomodoroForm, soundEnabled: !pomodoroForm.soundEnabled })}
+                className={cn(
+                  "w-11 h-6 rounded-full transition-colors relative p-0.5",
+                  pomodoroForm.soundEnabled ? "bg-emerald-500" : "bg-zinc-800"
+                )}
+              >
+                <div
+                  className={cn(
+                    "w-5 h-5 rounded-full bg-white transition-transform shadow-md",
+                    pomodoroForm.soundEnabled ? "translate-x-5" : "translate-x-0"
+                  )}
+                />
+              </button>
+            </div>
+
+            {/* Botão de Salvar Pomodoro */}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={handleSavePomodoro}
+                disabled={isSavingPomodoro}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white px-5 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-lg shadow-emerald-900/20 active:scale-95"
+              >
+                {isSavingPomodoro ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {isSavingPomodoro ? 'Salvando...' : 'Salvar Configurações do Pomodoro'}
               </button>
             </div>
           </div>

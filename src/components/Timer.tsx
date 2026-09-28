@@ -102,18 +102,13 @@ export function Timer() {
     }
   }, [pomodoroConfig.workMinutes, pomodoroConfig.shortBreakMinutes, pomodoroConfig.longBreakMinutes, mode, isRunning, isPaused]);
 
-  // Se o usuário nunca configurou o Pomodoro, abre a modal de configuração inicial no primeiro clique
-  const handleInitialConfigCheck = () => {
-    if (!pomodoroConfig.hasConfigured) {
-      setFormConfig({ 
-        ...pomodoroConfig,
-        timerType: pomodoroConfig.timerType || 'countdown'
-      });
-      setIsSettingsOpen(true);
-      return false;
-    }
-    return true;
-  };
+  // Sincroniza formConfig com a configuração global do store quando ela mudar
+  useEffect(() => {
+    setFormConfig({
+      ...pomodoroConfig,
+      timerType: pomodoroConfig.timerType || 'countdown'
+    });
+  }, [pomodoroConfig]);
 
   const lastTickRef = useRef<number>(Date.now());
   const modeRef = useRef(mode);
@@ -205,7 +200,10 @@ export function Timer() {
 
   // Play / Resume
   const handleStart = () => {
-    if (!handleInitialConfigCheck()) return;
+    if (!pomodoroConfig.hasConfigured) {
+      // Registra como configurado com os valores atuais para não exigir nova configuração a cada uso
+      updatePomodoroConfig({ hasConfigured: true });
+    }
     setIsRunning(true);
     setIsPaused(false);
   };
@@ -256,7 +254,7 @@ export function Timer() {
   };
 
   // Salvar formulário de configuração do Pomodoro
-  const handleSaveConfig = (e: React.FormEvent) => {
+  const handleSaveConfig = (e: React.FormEvent, andStart: boolean = false) => {
     e.preventDefault();
     const updated: PomodoroConfig = {
       ...formConfig,
@@ -276,6 +274,11 @@ export function Timer() {
       if (mode === 'work') setSecondsLeft(updated.workMinutes * 60);
       else if (mode === 'shortBreak') setSecondsLeft(updated.shortBreakMinutes * 60);
       else if (mode === 'longBreak') setSecondsLeft(updated.longBreakMinutes * 60);
+    }
+
+    if (andStart) {
+      setIsRunning(true);
+      setIsPaused(false);
     }
   };
 
@@ -497,14 +500,14 @@ export function Timer() {
             </div>
 
             {/* Conteúdo com rolabilidade interna (overflow-y-auto) */}
-            <form onSubmit={handleSaveConfig} className="p-5 sm:p-6 space-y-5 overflow-y-auto custom-scrollbar">
+            <form onSubmit={(e) => handleSaveConfig(e, false)} className="p-5 sm:p-6 space-y-5 overflow-y-auto custom-scrollbar">
               {!pomodoroConfig.hasConfigured && (
                 <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-xs text-emerald-300 flex items-start gap-2.5">
                   <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="font-bold text-emerald-200">Configuração Inicial!</strong>
+                    <strong className="font-bold text-emerald-200">Personalize seus Tempos!</strong>
                     <p className="mt-0.5 text-emerald-300/90 leading-relaxed">
-                      Configure o tipo de contagem e tempos para iniciar seus estudos.
+                      Defina seus tempos ideais. Esta configuração ficará gravada no seu perfil para os próximos usos.
                     </p>
                   </div>
                 </div>
@@ -652,15 +655,25 @@ export function Timer() {
                 </button>
               </div>
 
-              {/* Botão de Salvar */}
-              <div className="pt-2">
+              {/* Botões de Salvar */}
+              <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
                 <button
                   type="submit"
-                  className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold rounded-2xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 active:scale-[0.98] flex items-center justify-center gap-2"
+                  className="flex-1 py-3 px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold rounded-2xl text-xs uppercase tracking-wider transition-all border border-zinc-700 flex items-center justify-center gap-2"
                 >
-                  <Check className="w-4 h-4 stroke-[3]" /> Salvar e Iniciar Estudos
+                  <Check className="w-4 h-4 stroke-[3]" /> Salvar Preferências
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleSaveConfig(e, true)}
+                  className="flex-1 py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold rounded-2xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  <Play className="w-4 h-4 fill-zinc-950" /> Salvar e Iniciar
                 </button>
               </div>
+              <p className="text-[11px] text-zinc-500 text-center pt-1">
+                💾 Suas preferências serão salvas no seu perfil e sincronizadas na nuvem.
+              </p>
             </form>
           </div>
         </div>,

@@ -510,7 +510,8 @@ export const useStore = create<AppState>()(
       })),
 
       updatePomodoroConfig: (config) => set((state) => ({
-        pomodoroConfig: { ...state.pomodoroConfig, ...config }
+        pomodoroConfig: { ...state.pomodoroConfig, ...config },
+        lastUpdate: new Date().toISOString()
       })),
 
       setCurrentCycleIndex: (index) => set({ currentCycleIndex: index }),
@@ -620,6 +621,17 @@ export const useStore = create<AppState>()(
           birthDate: '',
           gender: '',
           avatar: null,
+        },
+        pomodoroConfig: {
+          workMinutes: 25,
+          shortBreakMinutes: 5,
+          longBreakMinutes: 15,
+          longBreakInterval: 4,
+          soundEnabled: true,
+          autoStartBreaks: false,
+          autoStartPomodoros: false,
+          hasConfigured: false,
+          timerType: 'countdown',
         },
         currentCycleIndex: 0,
         followingIds: [],
