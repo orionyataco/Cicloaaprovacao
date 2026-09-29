@@ -69,6 +69,7 @@ export function Dashboard() {
       }
 
       return {
+        id: subject.id,
         name: subject.name,
         percentage: Math.round(percentage),
         totalQuestions,
@@ -328,8 +329,8 @@ export function Dashboard() {
         <h2 className="text-lg font-semibold text-zinc-100 mb-4">Mapa de Calor por Disciplina</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {subjectPerformance.map(subject => {
-            const subjectTopics = topics.filter(t => t.subjectId === subjects.find(s => s.name === subject.name)?.id);
-            
+            const subjectTopics = topics.filter(t => t.subjectId === subject.id);
+
             const topicDetails = subjectTopics.map(topic => {
               const logs = questionLogs.filter(q => q.topicId === topic.id);
               const tQuestions = logs.reduce((acc, curr) => acc + curr.totalQuestions, 0);

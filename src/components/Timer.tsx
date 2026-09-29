@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Play, 
@@ -151,7 +151,7 @@ export function Timer() {
   }, [isRunning]);
 
   // Ação executada quando uma fase do Pomodoro zera (00:00)
-  const handlePhaseCompletion = () => {
+  const handlePhaseCompletion = useCallback(() => {
     if (pomodoroConfig.soundEnabled) {
       playCompletionSound();
     }
@@ -188,7 +188,26 @@ export function Timer() {
       setIsRunning(pomodoroConfig.autoStartPomodoros);
       setIsPaused(!pomodoroConfig.autoStartPomodoros);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, currentCycle, pomodoroConfig, activeTopicId, accumulatedWorkSeconds, logStudySession]);
+
+  // Ref para acessar valores atuais dentro de cleanup sem stale closure
+  const activeTopicIdRef = useRef(activeTopicId);
+  const accumulatedWorkSecondsRef = useRef(accumulatedWorkSeconds);
+  const modeStateRef = useRef(mode);
+  useEffect(() => { activeTopicIdRef.current = activeTopicId; }, [activeTopicId]);
+  useEffect(() => { accumulatedWorkSecondsRef.current = accumulatedWorkSeconds; }, [accumulatedWorkSeconds]);
+  useEffect(() => { modeStateRef.current = mode; }, [mode]);
+
+  // Salva o tempo acumulado ao desmontar (usuário trocou de aba com timer rodando)
+  useEffect(() => {
+    return () => {
+      if (modeStateRef.current === 'work' && accumulatedWorkSecondsRef.current > 10 && activeTopicIdRef.current) {
+        logStudySession(activeTopicIdRef.current, accumulatedWorkSecondsRef.current);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Dispara a conclusão de fase quando timer zera
   useEffect(() => {

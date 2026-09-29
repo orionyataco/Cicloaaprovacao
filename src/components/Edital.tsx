@@ -197,6 +197,10 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
     REVIEWED: 'Revisado'
   };
 
+  const totalEditalTopics = topics.length;
+  const completedEditalTopics = topics.filter(t => t.status !== 'NOT_READ').length;
+  const totalEditalPercent = totalEditalTopics > 0 ? Math.round((completedEditalTopics / totalEditalTopics) * 100) : 0;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
@@ -385,67 +389,165 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
             </button>
           </div>
         </div>
+
+        {/* Card de Progresso Geral do Edital */}
+        {subjects.length > 0 && (
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-zinc-200">Progresso Geral das Teorias</h3>
+                  <span className={cn(
+                    "text-xs font-bold px-2 py-0.5 rounded-full border",
+                    totalEditalPercent === 100 
+                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" 
+                      : totalEditalPercent > 0 
+                      ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                      : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                  )}>
+                    {totalEditalPercent}% estudado
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  <strong className="text-zinc-200">{completedEditalTopics}</strong> de <strong className="text-zinc-200">{totalEditalTopics}</strong> assuntos com teoria concluída em {subjects.length} {subjects.length === 1 ? 'matéria' : 'matérias'}
+                </p>
+              </div>
+            </div>
+
+            <div className="w-full md:w-64 flex flex-col gap-1.5 shrink-0">
+              <div className="flex justify-between text-xs text-zinc-400">
+                <span>Régua geral do edital</span>
+                <span className="font-semibold text-zinc-200 tabular-nums">{completedEditalTopics}/{totalEditalTopics}</span>
+              </div>
+              <div className="h-2.5 bg-zinc-950 rounded-full overflow-hidden p-0.5 border border-zinc-800">
+                <div 
+                  className="h-full bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-500 rounded-full transition-all duration-500" 
+                  style={{ width: `${totalEditalPercent}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {subjects.map(subject => {
           const subjectTopics = topics.filter(t => t.subjectId === subject.id);
+          const totalSubjectTopics = subjectTopics.length;
+          const completedSubjectTopics = subjectTopics.filter(t => t.status !== 'NOT_READ').length;
+          const subjectPercent = totalSubjectTopics > 0 ? Math.round((completedSubjectTopics / totalSubjectTopics) * 100) : 0;
           const isExpanded = expandedSubjects[subject.id];
           
           return (
-            <div key={subject.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <div key={subject.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-sm transition-all hover:border-zinc-700/80">
               <div 
-                className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/50 transition-colors cursor-pointer group/subject"
+                className="w-full flex flex-col md:flex-row md:items-center justify-between p-4 hover:bg-zinc-800/40 transition-colors cursor-pointer group/subject gap-3"
                 onClick={() => toggleSubject(subject.id)}
               >
-                <div className="flex items-center gap-3">
-                  {isExpanded ? <ChevronDown className="w-5 h-5 text-zinc-500" /> : <ChevronRight className="w-5 h-5 text-zinc-500" />}
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subject.color }} />
-                  <span className="font-semibold text-zinc-100">{subject.name}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  {isExpanded ? <ChevronDown className="w-5 h-5 text-zinc-500 shrink-0" /> : <ChevronRight className="w-5 h-5 text-zinc-500 shrink-0" />}
+                  <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: subject.color }} />
+                  <span className="font-semibold text-zinc-100 truncate">{subject.name}</span>
+                  <span className="text-xs text-zinc-500 hidden sm:inline shrink-0">
+                    ({totalSubjectTopics} {totalSubjectTopics === 1 ? 'assunto' : 'assuntos'})
+                  </span>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg p-1" onClick={(e) => e.stopPropagation()}>
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="20" 
-                      value={genCounts[subject.id] || 3}
-                      onChange={(e) => {
-                        setGenCounts(prev => ({ ...prev, [subject.id]: parseInt(e.target.value) || 1 }));
-                      }}
-                      className="w-10 bg-transparent text-center text-xs font-bold text-zinc-100 focus:outline-none"
-                    />
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAutoGenerateSubjectId(subject.id, genCounts[subject.id] || 3);
-                        onViewChange('simulados');
-                      }}
-                      className="p-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-md transition-all flex items-center gap-1.5"
-                      title="Gerar questões desta matéria"
-                    >
-                      <Brain className="w-3.5 h-3.5" />
-                      <span className="text-[10px] font-bold uppercase">Gerar</span>
-                    </button>
+
+                <div className="flex flex-wrap items-center justify-between md:justify-end gap-3 sm:gap-4 shrink-0 pl-8 md:pl-0">
+                  {/* Régua e Percentual da Matéria */}
+                  <div 
+                    className="flex items-center gap-3 bg-zinc-950/70 border border-zinc-800/80 px-3 py-1.5 rounded-lg"
+                    title={`${completedSubjectTopics} de ${totalSubjectTopics} assuntos com teoria concluída (${subjectPercent}%)`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                      <div className="w-20 sm:w-28 bg-zinc-800 h-2 rounded-full overflow-hidden p-0.5 border border-zinc-700/50">
+                        <div 
+                          className="h-full rounded-full transition-all duration-500" 
+                          style={{ 
+                            width: `${subjectPercent}%`,
+                            backgroundColor: subjectPercent === 100 ? '#10b981' : subject.color || '#3b82f6'
+                          }} 
+                        />
+                      </div>
+                      <span className="text-xs text-zinc-400 tabular-nums font-medium whitespace-nowrap">
+                        {completedSubjectTopics}/{totalSubjectTopics}
+                      </span>
+                    </div>
+
+                    <span className={cn(
+                      "text-xs px-2 py-0.5 rounded-md font-bold shrink-0 tabular-nums border",
+                      subjectPercent === 100
+                        ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                        : subjectPercent > 0
+                        ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                        : "bg-zinc-800 text-zinc-400 border-zinc-700/50"
+                    )}>
+                      {subjectPercent}%
+                    </span>
                   </div>
 
-                  {confirmDelete === subject.id ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-red-400 font-medium">Excluir?</span>
-                      <button onClick={(e) => { e.stopPropagation(); deleteSubject(subject.id); setConfirmDelete(null); }} className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Sim</button>
-                      <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(null); }} className="text-xs bg-zinc-700 text-zinc-200 px-2 py-1 rounded hover:bg-zinc-600">Não</button>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg p-1" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max="20" 
+                        value={genCounts[subject.id] || 3}
+                        onChange={(e) => {
+                          setGenCounts(prev => ({ ...prev, [subject.id]: parseInt(e.target.value) || 1 }));
+                        }}
+                        className="w-10 bg-transparent text-center text-xs font-bold text-zinc-100 focus:outline-none"
+                      />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAutoGenerateSubjectId(subject.id, genCounts[subject.id] || 3);
+                          onViewChange('simulados');
+                        }}
+                        className="p-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-md transition-all flex items-center gap-1.5"
+                        title="Gerar questões desta matéria"
+                      >
+                        <Brain className="w-3.5 h-3.5" />
+                        <span className="text-[10px] font-bold uppercase">Gerar</span>
+                      </button>
                     </div>
-                  ) : (
-                    <div 
-                      onClick={(e) => { e.stopPropagation(); setConfirmDelete(subject.id); }}
-                      className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-colors"
-                      title="Excluir disciplina"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </div>
-                  )}
+
+                    {confirmDelete === subject.id ? (
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <span className="text-xs text-red-400 font-medium">Excluir?</span>
+                        <button onClick={(e) => { e.stopPropagation(); deleteSubject(subject.id); setConfirmDelete(null); }} className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Sim</button>
+                        <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(null); }} className="text-xs bg-zinc-700 text-zinc-200 px-2 py-1 rounded hover:bg-zinc-600">Não</button>
+                      </div>
+                    ) : (
+                      <div 
+                        onClick={(e) => { e.stopPropagation(); setConfirmDelete(subject.id); }}
+                        className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-colors"
+                        title="Excluir disciplina"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
               {isExpanded && (
                 <div className="border-t border-zinc-800 p-4 bg-zinc-900/50 space-y-2">
+                  {/* Resumo do progresso da disciplina quando aberta */}
+                  <div className="flex items-center justify-between text-xs text-zinc-400 pb-2 px-1 border-b border-zinc-800/60 mb-2">
+                    <span className="flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-zinc-500" />
+                      Assuntos da disciplina: <strong className="text-zinc-200">{completedSubjectTopics} de {totalSubjectTopics}</strong> com teoria concluída
+                    </span>
+                    <span className={cn(
+                      "font-semibold",
+                      subjectPercent === 100 ? "text-emerald-400" : "text-zinc-300"
+                    )}>
+                      {subjectPercent}% estudado
+                    </span>
+                  </div>
                   {subjectTopics.map(topic => (
                     <div key={topic.id} className={cn(
                       "flex flex-col p-3 rounded-lg border transition-all group",

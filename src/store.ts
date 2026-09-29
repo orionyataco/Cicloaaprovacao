@@ -494,6 +494,7 @@ export const useStore = create<AppState>()(
         questionLogs: [],
         flashcards: [],
         studySessions: [],
+        wrongQuestions: [],
         currentCycleIndex: 0
       }),
 

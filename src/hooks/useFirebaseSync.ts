@@ -267,7 +267,6 @@ export function useFirebaseSync() {
           dataToSave.userProfile = { ...dataToSave.userProfile, avatar: null };
         }
         
-        const safeAvatar = dataToSave.userProfile?.avatar || null;
 
         // Atualiza o lastUpdate no estado local para que o próximo sync/refresh saiba
         useStore.setState({ lastUpdate: now });
@@ -313,7 +312,7 @@ export function useFirebaseSync() {
             searchName: (store.userProfile.name || 'Estudante').toLowerCase(), 
             username: store.userProfile.username.toLowerCase().trim(),
             bio: store.userProfile.bio || '',
-            avatar: safeAvatar,
+            avatar: dataToSave.userProfile?.avatar || null,
             editalInfo: {
               carreira: store.editalInfo.carreira || '',
               cargo: store.editalInfo.cargo || '',

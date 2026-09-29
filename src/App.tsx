@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Timer } from './components/Timer';
 import { Dashboard } from './components/Dashboard';
 import { Edital } from './components/Edital';
@@ -22,7 +22,7 @@ type View = 'dashboard' | 'edital' | 'flashcards' | 'ajudai' | 'simulados' | 'ac
 
 export default function App() {
   useFirebaseSync();
-  const { userProfile, isAuthenticated, login, logout, isDemoMode } = useStore();
+  const { userProfile, isAuthenticated, login, logout, isDemoMode, isHydrated } = useStore();
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
@@ -59,6 +59,13 @@ export default function App() {
     setIsSidebarOpen(false);
   };
 
+  // Limpa o parâmetro ?q= via efeito quando o usuário está autenticado
+  useEffect(() => {
+    if (sharedQuestionId && isAuthenticated) {
+      clearSharedParam();
+    }
+  }, [sharedQuestionId, isAuthenticated]);
+
   // Se há um parâmetro ?q= e o usuário NÃO está autenticado, mostra a view pública
   if (sharedQuestionId && !isAuthenticated) {
     return (
@@ -68,12 +75,6 @@ export default function App() {
         onGoToLogin={() => { clearSharedParam(); }}
       />
     );
-  }
-
-  // Se há um parâmetro ?q= e o usuário ESTÁ autenticado, limpa o parâmetro
-  // (o usuário já está dentro da plataforma)
-  if (sharedQuestionId && isAuthenticated) {
-    clearSharedParam();
   }
 
   if (!isAuthenticated) {
@@ -94,7 +95,7 @@ export default function App() {
   }
 
   // Se está autenticado, mas os dados ainda não foram carregados do Firebase
-  if (!useStore.getState().isHydrated) {
+  if (!isHydrated) {
     return (
       <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-4 selection:bg-emerald-500/30">
         {/* Background Glow Decorations */}

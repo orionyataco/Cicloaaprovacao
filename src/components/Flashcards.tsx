@@ -11,7 +11,8 @@ export function Flashcards() {
   const [newBack, setNewBack] = useState('');
   const [selectedTopic, setSelectedTopic] = useState('');
 
-  const today = startOfDay(new Date());
+  // Memoizado para não recriar a cada render e causar re-cálculos desnecessários
+  const today = useMemo(() => startOfDay(new Date()), []);
 
   // Prioritize flashcards:
   // 1. Due today or overdue
