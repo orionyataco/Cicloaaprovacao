@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { addDays } from 'date-fns';
+import { areTopicsSemanticallyEqual } from './lib/semanticMatch';
 
 export type TopicStatus = 'NOT_READ' | 'THEORY_DONE' | 'SUMMARY_DONE' | 'REVIEWED';
 export type ErrorReason = 'ATTENTION' | 'UNSEEN' | 'TRICK' | 'NONE';
@@ -241,6 +242,7 @@ interface AppState {
   switchCourse: (id: string) => void;
   deleteCourse: (id: string) => void;
   updateCourseName: (id: string, name: string) => void;
+  ensureActiveCourse: () => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -388,8 +390,7 @@ export const useStore = create<AppState>()(
             
             if (!isTarget && mainSubject) {
               const s = state.subjects.find(sub => sub.id === t.subjectId);
-              if (s && s.name.trim().toLowerCase() === mainSubject.name.trim().toLowerCase() && 
-                  t.name.trim().toLowerCase() === mainTopic.name.trim().toLowerCase()) {
+              if (s && areTopicsSemanticallyEqual(mainSubject.name, mainTopic.name, s.name, t.name)) {
                 isSemanticSibling = true;
               }
             }
@@ -707,6 +708,8 @@ export const useStore = create<AppState>()(
         autoGenerateTopicId: null,
         autoGenerateSubjectId: null,
         autoGenerateCount: 3,
+        savedCourses: [],
+        activeCourseId: null,
         lastUpdate: null,
         uid: null,
         timerStartTime: null,
@@ -714,6 +717,45 @@ export const useStore = create<AppState>()(
         isAuthenticated: false,
         isDemoMode: false,
         isHydrated: false,
+      }),
+
+      ensureActiveCourse: () => set((state) => {
+        const currentActiveId = state.activeCourseId || 'principal';
+        const hasSubjects = state.subjects.length > 0;
+        const hasEditalInfo = Boolean(state.editalInfo.cargo || state.editalInfo.carreira);
+
+        // Se já está tudo configurado e consistente, mantém
+        if (state.activeCourseId && state.savedCourses.some(c => c.id === state.activeCourseId)) {
+          return state;
+        }
+
+        // Se tem dados de estudos, assegura o registro do Edital Principal
+        if (hasSubjects || hasEditalInfo || state.savedCourses.length === 0) {
+          const defaultName = state.editalInfo.cargo ? `Edital: ${state.editalInfo.cargo}` : (state.editalInfo.carreira ? `Edital: ${state.editalInfo.carreira}` : 'Edital Principal');
+          const existingIdx = state.savedCourses.findIndex(c => c.id === currentActiveId || c.id === 'default_migration' || c.id === 'principal');
+
+          let updatedCourses = [...state.savedCourses];
+          if (existingIdx !== -1) {
+            const matchedId = updatedCourses[existingIdx].id;
+            return { activeCourseId: matchedId };
+          } else {
+            const principalCourse: SavedCourse = {
+              id: currentActiveId,
+              name: defaultName,
+              subjects: state.subjects,
+              topics: state.topics,
+              editalInfo: state.editalInfo,
+              scheduleConfig: state.scheduleConfig,
+              currentCycleIndex: state.currentCycleIndex
+            };
+            return {
+              activeCourseId: currentActiveId,
+              savedCourses: [principalCourse, ...updatedCourses]
+            };
+          }
+        }
+
+        return state;
       }),
 
       createCourse: (name: string) => set((state) => {
@@ -729,28 +771,28 @@ export const useStore = create<AppState>()(
         };
 
         let updatedSavedCourses = [...state.savedCourses];
-        if (state.activeCourseId) {
-          const currentIndex = updatedSavedCourses.findIndex(c => c.id === state.activeCourseId);
-          if (currentIndex !== -1) {
-            updatedSavedCourses[currentIndex] = {
-              ...updatedSavedCourses[currentIndex],
-              subjects: state.subjects,
-              topics: state.topics,
-              editalInfo: state.editalInfo,
-              scheduleConfig: state.scheduleConfig,
-              currentCycleIndex: state.currentCycleIndex
-            };
-          }
-        } else if (state.subjects.length > 0) {
-           updatedSavedCourses.push({
-             id: 'default_migration',
-             name: 'Edital Principal',
-             subjects: state.subjects,
-             topics: state.topics,
-             editalInfo: state.editalInfo,
-             scheduleConfig: state.scheduleConfig,
-             currentCycleIndex: state.currentCycleIndex
-           });
+        const currentActiveId = state.activeCourseId || 'principal';
+        const currentIndex = updatedSavedCourses.findIndex(c => c.id === currentActiveId);
+
+        if (currentIndex !== -1) {
+          updatedSavedCourses[currentIndex] = {
+            ...updatedSavedCourses[currentIndex],
+            subjects: state.subjects,
+            topics: state.topics,
+            editalInfo: state.editalInfo,
+            scheduleConfig: state.scheduleConfig,
+            currentCycleIndex: state.currentCycleIndex
+          };
+        } else if (state.subjects.length > 0 || state.editalInfo.cargo || state.editalInfo.carreira) {
+          updatedSavedCourses.push({
+            id: currentActiveId,
+            name: state.editalInfo.cargo ? `Edital: ${state.editalInfo.cargo}` : 'Edital Principal',
+            subjects: state.subjects,
+            topics: state.topics,
+            editalInfo: state.editalInfo,
+            scheduleConfig: state.scheduleConfig,
+            currentCycleIndex: state.currentCycleIndex
+          });
         }
         
         updatedSavedCourses.push(newCourse);
@@ -770,29 +812,28 @@ export const useStore = create<AppState>()(
         if (state.activeCourseId === id) return state;
 
         let updatedSavedCourses = [...state.savedCourses];
+        const currentActiveId = state.activeCourseId || 'principal';
+        const currentIndex = updatedSavedCourses.findIndex(c => c.id === currentActiveId);
         
-        if (state.activeCourseId) {
-          const currentIndex = updatedSavedCourses.findIndex(c => c.id === state.activeCourseId);
-          if (currentIndex !== -1) {
-            updatedSavedCourses[currentIndex] = {
-              ...updatedSavedCourses[currentIndex],
-              subjects: state.subjects,
-              topics: state.topics,
-              editalInfo: state.editalInfo,
-              scheduleConfig: state.scheduleConfig,
-              currentCycleIndex: state.currentCycleIndex
-            };
-          }
-        } else if (state.subjects.length > 0) {
-           updatedSavedCourses.push({
-             id: 'default_migration',
-             name: 'Edital Principal',
-             subjects: state.subjects,
-             topics: state.topics,
-             editalInfo: state.editalInfo,
-             scheduleConfig: state.scheduleConfig,
-             currentCycleIndex: state.currentCycleIndex
-           });
+        if (currentIndex !== -1) {
+          updatedSavedCourses[currentIndex] = {
+            ...updatedSavedCourses[currentIndex],
+            subjects: state.subjects,
+            topics: state.topics,
+            editalInfo: state.editalInfo,
+            scheduleConfig: state.scheduleConfig,
+            currentCycleIndex: state.currentCycleIndex
+          };
+        } else if (state.subjects.length > 0 || state.editalInfo.cargo || state.editalInfo.carreira) {
+          updatedSavedCourses.push({
+            id: currentActiveId,
+            name: state.editalInfo.cargo ? `Edital: ${state.editalInfo.cargo}` : 'Edital Principal',
+            subjects: state.subjects,
+            topics: state.topics,
+            editalInfo: state.editalInfo,
+            scheduleConfig: state.scheduleConfig,
+            currentCycleIndex: state.currentCycleIndex
+          });
         }
 
         const targetCourse = updatedSavedCourses.find(c => c.id === id);
@@ -838,9 +879,29 @@ export const useStore = create<AppState>()(
          return { savedCourses: newSaved };
       }),
       
-      updateCourseName: (id: string, name: string) => set((state) => ({
-         savedCourses: state.savedCourses.map(c => c.id === id ? { ...c, name } : c)
-      })),
+      updateCourseName: (id: string, name: string) => set((state) => {
+        const exists = state.savedCourses.some(c => c.id === id);
+        if (!exists) {
+          return {
+            activeCourseId: id,
+            savedCourses: [
+              ...state.savedCourses,
+              {
+                id,
+                name,
+                subjects: state.subjects,
+                topics: state.topics,
+                editalInfo: state.editalInfo,
+                scheduleConfig: state.scheduleConfig,
+                currentCycleIndex: state.currentCycleIndex
+              }
+            ]
+          };
+        }
+        return {
+          savedCourses: state.savedCourses.map(c => c.id === id ? { ...c, name } : c)
+        };
+      }),
 
       startTimer: (topicId) => set({ 
         timerStartTime: new Date().toISOString(), 

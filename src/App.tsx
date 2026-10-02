@@ -23,13 +23,8 @@ type View = 'cursos' | 'dashboard' | 'edital' | 'flashcards' | 'ajudai' | 'simul
 
 export default function App() {
   useFirebaseSync();
-<<<<<<< HEAD
   const { userProfile, isAuthenticated, login, logout, isDemoMode, isHydrated } = useStore();
-  const [currentView, setCurrentView] = useState<View>('dashboard');
-=======
-  const { userProfile, isAuthenticated, login, logout, isDemoMode } = useStore();
   const [currentView, setCurrentView] = useState<View>('cursos');
->>>>>>> e132630 (multiplos editais)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
 

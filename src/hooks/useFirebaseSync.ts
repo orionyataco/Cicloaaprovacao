@@ -66,11 +66,22 @@ export function useFirebaseSync() {
 
             console.log(`[Firebase] Checando sincronização: Local(${localLastUpdate}) vs Remoto(${remoteLastUpdate})`);
 
+            const localState = useStore.getState();
+            const localHasData = (localState.studySessions?.length ?? 0) > 0 || (localState.questionLogs?.length ?? 0) > 0;
+            const remoteHasData = (remoteData.studySessions?.length ?? 0) > 0 || (remoteData.questionLogs?.length ?? 0) > 0;
+
+            // Usa dados remotos se:
+            // 1. Não há lastUpdate local (primeira vez), ou
+            // 2. Remoto é mais recente que local, ou
+            // 3. Local está vazio mas remoto tem dados (recuperação após corrupção)
             const shouldOverwrite = !localLastUpdate || 
-                                    (remoteLastUpdate && new Date(remoteLastUpdate) > new Date(localLastUpdate));
+                                    (remoteLastUpdate && new Date(remoteLastUpdate) > new Date(localLastUpdate)) ||
+                                    (!localHasData && remoteHasData);
+
+            console.log(`[Firebase] shouldOverwrite=${shouldOverwrite} | localHasData=${localHasData} | remoteHasData=${remoteHasData}`);
 
             if (shouldOverwrite) {
-              console.log('[Firebase] ⬇️ Dados remotos são mais novos. Atualizando estado local...');
+              console.log('[Firebase] ⬇️ Dados remotos são mais novos ou mais completos. Atualizando estado local...');
               useStore.setState({
                 subjects: remoteData.subjects ?? [],
                 topics: remoteData.topics ?? [],
@@ -107,6 +118,8 @@ export function useFirebaseSync() {
                 activeTopicId: remoteData.activeTopicId ?? null,
                 notifications: remoteData.notifications ?? [],
                 wrongQuestions: remoteData.wrongQuestions ?? [],
+                savedCourses: remoteData.savedCourses ?? [],
+                activeCourseId: remoteData.activeCourseId ?? null,
                 lastUpdate: remoteData.lastUpdate ?? null,
                 isAuthenticated: true,
                 uid: user.uid
@@ -282,9 +295,8 @@ export function useFirebaseSync() {
         if (store.userProfile.username && store.userProfile.username.trim().length > 0) {
           const totalQuestionsFromLogs = store.questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0);
           const totalCorrectFromLogs = store.questionLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0);
-          const manualSimulados = store.simulados.filter(s => s.type === 'manual' || s.type === 'shared');
-          const totalQuestionsFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.total, 0);
-          const totalCorrectFromSimulados = manualSimulados.reduce((acc, curr) => acc + curr.score, 0);
+          const totalQuestionsFromSimulados = store.simulados.reduce((acc, curr) => acc + curr.total, 0);
+          const totalCorrectFromSimulados = store.simulados.reduce((acc, curr) => acc + curr.score, 0);
 
           const totalQuestions = totalQuestionsFromLogs + totalQuestionsFromSimulados;
           const totalCorrect = totalCorrectFromLogs + totalCorrectFromSimulados;
@@ -300,7 +312,7 @@ export function useFirebaseSync() {
           
           const validSessions = store.studySessions.filter(s => parseISO(s.date).getTime() >= rankingStart.getTime() && (!rankingEnd || parseISO(s.date).getTime() <= rankingEnd.getTime()));
           const validLogs = store.questionLogs.filter(q => parseISO(q.date).getTime() >= rankingStart.getTime() && (!rankingEnd || parseISO(q.date).getTime() <= rankingEnd.getTime()));
-          const validSimulados = manualSimulados.filter(s => parseISO(s.date).getTime() >= rankingStart.getTime() && (!rankingEnd || parseISO(s.date).getTime() <= rankingEnd.getTime()));
+          const validSimulados = store.simulados.filter(s => parseISO(s.date).getTime() >= rankingStart.getTime() && (!rankingEnd || parseISO(s.date).getTime() <= rankingEnd.getTime()));
           
           const weeklyStudySeconds = validSessions.reduce((acc, curr) => acc + curr.durationSeconds, 0);
           const weeklyTotalQs = validLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0) + validSimulados.reduce((acc, curr) => acc + curr.total, 0);
@@ -366,6 +378,8 @@ export function useFirebaseSync() {
     store.customRankingEndDate,
     store.notifications,
     store.wrongQuestions,
+    store.savedCourses,
+    store.activeCourseId,
     store.isAuthenticated,
     hasHydrated
   ]);

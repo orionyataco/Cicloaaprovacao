@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { Library, Plus, ArrowRight, BookOpen, Clock, Settings, Edit2, Check, X, Globe, UserCircle, Search } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { calculateCourseCompatibility } from '../lib/semanticMatch';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { db, isFirebaseConfigured } from '../lib/firebase';
@@ -21,8 +22,27 @@ interface CursosProps {
   onViewChange: (view: any) => void;
 }
 
+const formatDateSafe = (dateStr?: string | null) => {
+  if (!dateStr || typeof dateStr !== 'string' || !dateStr.trim()) return '--';
+  const cleanStr = dateStr.trim();
+  
+  if (/^\d{2}\/\d{2}\/(\d{2}|\d{4})$/.test(cleanStr)) {
+    return cleanStr;
+  }
+  
+  try {
+    const d = new Date(cleanStr);
+    if (isNaN(d.getTime())) {
+      return cleanStr;
+    }
+    return format(d, 'dd/MM/yy');
+  } catch {
+    return cleanStr;
+  }
+};
+
 export function Cursos({ onViewChange }: CursosProps) {
-  const { savedCourses, activeCourseId, switchCourse, createCourse, deleteCourse, updateCourseName, editalInfo, subjects, topics } = useStore();
+  const { savedCourses, activeCourseId, switchCourse, createCourse, deleteCourse, updateCourseName, ensureActiveCourse, editalInfo, subjects, topics } = useStore();
   
   const [isCreating, setIsCreating] = useState(false);
   const [newCourseName, setNewCourseName] = useState('');
@@ -33,6 +53,10 @@ export function Cursos({ onViewChange }: CursosProps) {
   const [communityEditals, setCommunityEditals] = useState<CommunityEdital[]>([]);
   const [isLoadingCommunity, setIsLoadingCommunity] = useState(false);
   const [communitySearchTerm, setCommunitySearchTerm] = useState('');
+
+  useEffect(() => {
+    ensureActiveCourse();
+  }, []);
 
   useEffect(() => {
     const fetchCommunityEditals = async () => {
@@ -99,28 +123,18 @@ export function Cursos({ onViewChange }: CursosProps) {
     setEditingId(null);
   };
 
-  const activeCourse = savedCourses.find(c => c.id === activeCourseId);
+  const activeCourse = savedCourses.find(c => c.id === activeCourseId) 
+    || savedCourses.find(c => c.id === 'principal' || c.id === 'default_migration');
 
-  // Calcula a % de compatibilidade de um curso listado em relação ao Curso Principal atualmente ativo
+  const hasActiveEdital = Boolean(activeCourse || subjects.length > 0 || editalInfo.cargo || editalInfo.carreira || activeCourseId);
+  const currentCourseId = activeCourse?.id || activeCourseId || 'principal';
+  const currentCourseName = activeCourse?.name || (editalInfo.cargo ? `Edital: ${editalInfo.cargo}` : (editalInfo.carreira ? `Edital: ${editalInfo.carreira}` : 'Edital Principal'));
+
+  // Calcula a % de compatibilidade de um curso listado em relação ao Curso Principal atualmente ativo (comparação semântica)
   const getCompatibility = (targetCourse: typeof savedCourses[0]) => {
-     if (!activeCourse && subjects.length === 0) return 0; 
-     const activeTopicsWithSubjects = topics.map(t => {
-       const sub = subjects.find(s => s.id === t.subjectId);
-       return { subjectName: sub?.name.toLowerCase().trim() || '', topicName: t.name.toLowerCase().trim() };
-     });
-     if (activeTopicsWithSubjects.length === 0) return 0;
-
-     let matchCount = 0;
-     targetCourse.topics.forEach(t => {
-       const tSub = targetCourse.subjects.find(s => s.id === t.subjectId);
-       const tSubStr = tSub?.name.toLowerCase().trim() || '';
-       const tNameStr = t.name.toLowerCase().trim();
-       const isMatch = activeTopicsWithSubjects.some(at => at.subjectName === tSubStr && at.topicName === tNameStr);
-       if (isMatch) matchCount++;
-     });
-     
-     if (targetCourse.topics.length === 0) return 0;
-     return Math.round((matchCount / targetCourse.topics.length) * 100);
+     if (!hasActiveEdital && subjects.length === 0) return 0; 
+     if (targetCourse.topics.length === 0 || topics.length === 0) return 0;
+     return calculateCourseCompatibility(subjects, topics, targetCourse.subjects, targetCourse.topics);
   };
 
   return (
@@ -134,7 +148,7 @@ export function Cursos({ onViewChange }: CursosProps) {
         {!isCreating ? (
           <button
             onClick={() => setIsCreating(true)}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg shadow-emerald-950/20 active:scale-95"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg shadow-emerald-950/20 active:scale-95 cursor-pointer"
           >
             <Plus className="w-5 h-5" /> Criar Novo Edital
           </button>
@@ -148,10 +162,10 @@ export function Cursos({ onViewChange }: CursosProps) {
               onChange={e => setNewCourseName(e.target.value)}
               className="bg-transparent text-sm text-zinc-200 px-3 outline-none min-w-[200px]"
             />
-            <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 p-2 rounded-lg text-white">
+            <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 p-2 rounded-lg text-white cursor-pointer">
               <Check className="w-4 h-4" />
             </button>
-            <button type="button" onClick={() => setIsCreating(false)} className="hover:bg-zinc-800 p-2 rounded-lg text-zinc-500 hover:text-zinc-300">
+            <button type="button" onClick={() => setIsCreating(false)} className="hover:bg-zinc-800 p-2 rounded-lg text-zinc-500 hover:text-zinc-300 cursor-pointer">
               <X className="w-4 h-4" />
             </button>
           </form>
@@ -160,7 +174,7 @@ export function Cursos({ onViewChange }: CursosProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Renderiza o card do curso 'ativo' com informações em tempo real da Store. */}
-        {activeCourseId && activeCourse && (
+        {hasActiveEdital && (
           <div className="bg-zinc-900 border-2 border-emerald-500/30 rounded-2xl p-5 shadow-[0_0_20px_rgba(16,185,129,0.05)] relative overflow-hidden group">
             <div className="absolute top-0 right-0 px-3 py-1 bg-emerald-500/20 rounded-bl-xl text-[10px] font-bold text-emerald-400 uppercase">
               Ativo Agora
@@ -171,14 +185,14 @@ export function Cursos({ onViewChange }: CursosProps) {
                 <Library className="w-6 h-6 text-emerald-400" />
               </div>
               <div className="flex-1">
-                {editingId === activeCourse.id ? (
-                  <form onSubmit={(e) => { e.preventDefault(); saveEdit(activeCourse.id); }} className="flex gap-2 w-full">
-                     <input type="text" autoFocus value={editName} onChange={e => setEditName(e.target.value)} onBlur={() => saveEdit(activeCourse.id)} className="w-full bg-zinc-950 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100" />
+                {editingId === currentCourseId ? (
+                  <form onSubmit={(e) => { e.preventDefault(); saveEdit(currentCourseId); }} className="flex gap-2 w-full">
+                     <input type="text" autoFocus value={editName} onChange={e => setEditName(e.target.value)} onBlur={() => saveEdit(currentCourseId)} className="w-full bg-zinc-950 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100" />
                   </form>
                 ) : (
                   <h3 className="font-bold text-zinc-100 text-lg flex items-center gap-2 group-hover:text-emerald-400 transition-colors">
-                    {activeCourse.name}
-                    <button onClick={(e) => { e.stopPropagation(); setEditingId(activeCourse.id); setEditName(activeCourse.name); }} className="opacity-0 group-hover:opacity-100 p-1 hover:text-zinc-300 transition-all">
+                    {currentCourseName}
+                    <button onClick={(e) => { e.stopPropagation(); setEditingId(currentCourseId); setEditName(currentCourseName); }} className="opacity-0 group-hover:opacity-100 p-1 hover:text-zinc-300 transition-all cursor-pointer" title="Editar nome">
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                   </h3>
@@ -194,13 +208,13 @@ export function Cursos({ onViewChange }: CursosProps) {
               </div>
               <div className="flex-1 text-center">
                 <p className="text-[10px] text-zinc-500 font-bold uppercase mb-0.5">Data da Prova</p>
-                <p className="text-sm font-semibold text-zinc-300 mt-1">{editalInfo.dataProva ? format(new Date(editalInfo.dataProva), 'dd/MM/yy') : '--'}</p>
+                <p className="text-sm font-semibold text-zinc-300 mt-1">{formatDateSafe(editalInfo.dataProva)}</p>
               </div>
             </div>
 
             <button 
               onClick={() => onViewChange('edital')}
-              className="w-full flex items-center justify-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 py-2.5 rounded-xl text-emerald-400 font-bold text-sm transition-all"
+              className="w-full flex items-center justify-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 py-2.5 rounded-xl text-emerald-400 font-bold text-sm transition-all cursor-pointer"
             >
               Continuar Estudando <ArrowRight className="w-4 h-4" />
             </button>
@@ -208,13 +222,13 @@ export function Cursos({ onViewChange }: CursosProps) {
         )}
 
         {/* Renderiza os cursos salvos não-ativos */}
-        {savedCourses.filter(c => c.id !== activeCourseId && c.id !== 'default_migration').map((course) => {
+        {savedCourses.filter(c => c.id !== currentCourseId && c.id !== activeCourse?.id).map((course) => {
           const compatibilidade = getCompatibility(course);
           
           return (
           <div key={course.id} className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors rounded-2xl p-5 group flex flex-col relative overflow-hidden">
             
-            {compatibilidade > 0 && activeCourseId && (
+            {compatibilidade > 0 && hasActiveEdital && (
                <div className="absolute top-0 right-0 px-3 py-1 bg-blue-500/20 rounded-bl-xl text-[10px] font-bold text-blue-400">
                  {compatibilidade}% Compatível
                </div>
@@ -231,7 +245,7 @@ export function Cursos({ onViewChange }: CursosProps) {
                 ) : (
                   <h3 className="font-bold text-zinc-300 text-lg flex items-center gap-2 group-hover:text-zinc-100 transition-colors">
                     {course.name}
-                    <button onClick={(e) => { e.stopPropagation(); setEditingId(course.id); setEditName(course.name); }} className="opacity-0 group-hover:opacity-100 p-1 hover:text-zinc-400 transition-all">
+                    <button onClick={(e) => { e.stopPropagation(); setEditingId(course.id); setEditName(course.name); }} className="opacity-0 group-hover:opacity-100 p-1 hover:text-zinc-400 transition-all cursor-pointer" title="Editar nome">
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                   </h3>
@@ -247,21 +261,21 @@ export function Cursos({ onViewChange }: CursosProps) {
               </div>
               <div className="flex-1 text-center">
                 <p className="text-[10px] text-zinc-600 font-bold uppercase mb-0.5">Data da Prova</p>
-                <p className="text-sm font-semibold text-zinc-500 mt-1">{course.editalInfo?.dataProva ? format(new Date(course.editalInfo.dataProva), 'dd/MM/yy') : '--'}</p>
+                <p className="text-sm font-semibold text-zinc-500 mt-1">{formatDateSafe(course.editalInfo?.dataProva)}</p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => handleSwitch(course.id)}
-                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2.5 rounded-xl font-bold text-sm transition-all"
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer"
               >
                 Ativar Curso
               </button>
               
               <button 
                 onClick={() => { if(confirm('Tem certeza que deseja remover este curso? Você perderá todos os estudos vinculados unicamente a ele.')) deleteCourse(course.id); }}
-                className="p-2.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all"
+                className="p-2.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
                 title="Excluir curso"
               >
                 <X className="w-5 h-5" />
@@ -271,14 +285,14 @@ export function Cursos({ onViewChange }: CursosProps) {
           );
         })}
 
-        {savedCourses.length === 0 && !activeCourseId && (
+        {!hasActiveEdital && savedCourses.length === 0 && (
           <div className="col-span-full py-16 flex flex-col items-center text-center bg-zinc-900/50 rounded-3xl border border-dashed border-zinc-800">
             <BookOpen className="w-16 h-16 text-emerald-500/20 mb-4" />
             <h3 className="text-xl font-bold text-zinc-300 mb-2">Nenhum curso iniciado</h3>
             <p className="text-zinc-500 text-sm max-w-sm mb-6">Comece agora mesmo criando seu primeiro edital de estudos e acompanhe seu progresso.</p>
             <button
               onClick={() => setIsCreating(true)}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-950/20 transition-all"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-950/20 transition-all cursor-pointer"
             >
               Criar Meu Primeiro Edital
             </button>
