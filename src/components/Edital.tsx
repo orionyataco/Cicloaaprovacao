@@ -1,13 +1,25 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useStore, TopicStatus, EditalInfo } from '@/store';
-import { Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, FileText, RefreshCw, Trash2, AlertTriangle, Edit2, Save, X, Info, ExternalLink, CalendarDays, CalendarClock, Brain, Youtube, Link as LinkIcon, Search, Sparkles, Check, Loader2 } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, FileText, RefreshCw, Trash2, AlertTriangle, Edit2, Save, X, Info, ExternalLink, CalendarDays, CalendarClock, Brain, Youtube, Link as LinkIcon, Search, Sparkles, Check, Loader2, Users, UserCircle, Share2, Library, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { callGemini, callGeminiJSON } from '@/lib/gemini';
 import { Ciclo } from './Ciclo';
 import { Cronograma } from './Cronograma';
+import { db, isFirebaseConfigured } from '@/lib/firebase';
+import { collection, getDocs, query, where, limit, orderBy } from 'firebase/firestore';
+
+interface CommunityEdital {
+  uid: string;
+  name: string;
+  username: string;
+  avatar: string | null;
+  cargo: string;
+  carreira: string;
+  subjects: { subject: string; topics: string[] }[];
+}
 
 export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) {
-  const { subjects, topics, addSubject, addTopic, updateTopicStatus, importEdital, deleteSubject, deleteAllSubjects, editalInfo, updateEditalInfo, setActiveTopicId, activeTopicId, setAutoGenerateTopicId, setAutoGenerateSubjectId, updateTopicLinks, updateTopicSummary } = useStore();
+  const { subjects, topics, addSubject, addTopic, updateTopicStatus, importEdital, deleteSubject, deleteAllSubjects, editalInfo, updateEditalInfo, setActiveTopicId, activeTopicId, setAutoGenerateTopicId, setAutoGenerateSubjectId, updateTopicLinks, updateTopicSummary, activeCourseId, savedCourses, switchCourse } = useStore();
   const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
   const [genCounts, setGenCounts] = useState<Record<string, number>>({});
   const [isBulkAddModalOpen, setIsBulkAddModalOpen] = useState(false);
@@ -29,6 +41,50 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
   const [activeSummary, setActiveSummary] = useState<{topicName: string, content: string} | null>(null);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
+  const [templateTab, setTemplateTab] = useState<'prontos' | 'comunidade'>('prontos');
+  const [communityEditals, setCommunityEditals] = useState<CommunityEdital[]>([]);
+  const [isLoadingCommunity, setIsLoadingCommunity] = useState(false);
+  const [communitySearchTerm, setCommunitySearchTerm] = useState('');
+
+  // Buscar editais da comunidade do Firestore
+  const fetchCommunityEditals = async () => {
+    if (!isFirebaseConfigured()) return;
+    setIsLoadingCommunity(true);
+    try {
+      const currentUid = useStore.getState().uid;
+      const profilesRef = collection(db, 'profiles');
+      const snapshot = await getDocs(query(profilesRef, limit(50)));
+      const results: CommunityEdital[] = [];
+      
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        // Só inclui se tiver editalStructure com conteúdo e não for o próprio usuário
+        if (data.editalStructure && Array.isArray(data.editalStructure) && data.editalStructure.length > 0 && docSnap.id !== currentUid) {
+          results.push({
+            uid: docSnap.id,
+            name: data.name || 'Estudante',
+            username: data.username || '',
+            avatar: data.avatar || null,
+            cargo: data.editalInfo?.cargo || '',
+            carreira: data.editalInfo?.carreira || '',
+            subjects: data.editalStructure,
+          });
+        }
+      });
+
+      setCommunityEditals(results);
+    } catch (err) {
+      console.error('[Edital] Erro ao buscar editais da comunidade:', err);
+    } finally {
+      setIsLoadingCommunity(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isTemplatesModalOpen && templateTab === 'comunidade' && communityEditals.length === 0) {
+      fetchCommunityEditals();
+    }
+  }, [isTemplatesModalOpen, templateTab]);
 
   const handleSaveInfo = () => {
     updateEditalInfo(tempInfo);
@@ -203,11 +259,27 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <header className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+      <header className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-zinc-100">Meu Edital</h1>
           <p className="text-zinc-400 mt-1">Gerencie as disciplinas e tópicos do seu edital.</p>
         </div>
+        
+        {savedCourses.length >= 1 && (
+          <div className="w-full sm:w-64 bg-zinc-950/50 border border-zinc-700/50 rounded-xl p-1 flex items-center shrink-0">
+            <select
+              value={activeCourseId || ''}
+              onChange={(e) => switchCourse(e.target.value)}
+              className="w-full appearance-none bg-transparent hover:bg-zinc-800 text-sm font-semibold text-zinc-200 py-2 pl-3 pr-8 rounded-lg cursor-pointer outline-none transition-colors truncate"
+            >
+              {savedCourses.map(course => (
+                <option key={course.id} value={course.id} className="bg-zinc-900 text-zinc-200">
+                  {course.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </header>
 
       {toast && (
@@ -932,77 +1004,242 @@ export function Edital({ onViewChange }: { onViewChange: (view: any) => void }) 
           </div>
         </div>
       )}
-      {/* Templates Modal */}
+      {/* Templates Modal - Biblioteca de Editais */}
       {isTemplatesModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-500/10 rounded-lg">
-                  <BookOpen className="w-5 h-5 text-emerald-400" />
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-6 border-b border-zinc-800 bg-zinc-900/50">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-gradient-to-br from-emerald-500/20 to-blue-500/20 rounded-xl">
+                    <Library className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-zinc-100">Biblioteca de Editais</h2>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Prontos para importar</p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold text-zinc-100">Biblioteca de Editais Prontos</h2>
-                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Importe um edital estruturado</p>
-                </div>
+                <button 
+                  onClick={() => { setIsTemplatesModalOpen(false); setTemplateTab('prontos'); setCommunitySearchTerm(''); }}
+                  className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button 
-                onClick={() => setIsTemplatesModalOpen(false)}
-                className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+
+              {/* Tabs */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setTemplateTab('prontos')}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200",
+                    templateTab === 'prontos'
+                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.08)]"
+                      : "bg-zinc-950/50 text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-zinc-300"
+                  )}
+                >
+                  <BookOpen className="w-4 h-4" />
+                  Editais Prontos
+                </button>
+                <button
+                  onClick={() => setTemplateTab('comunidade')}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200",
+                    templateTab === 'comunidade'
+                      ? "bg-blue-500/15 text-blue-400 border border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.08)]"
+                      : "bg-zinc-950/50 text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-zinc-300"
+                  )}
+                >
+                  <Globe className="w-4 h-4" />
+                  Editais da Comunidade
+                  {communityEditals.length > 0 && (
+                    <span className="bg-blue-500/20 text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      {communityEditals.length}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
 
+            {/* Body */}
             <div className="p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
-              <div className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-xl">
-                <p className="text-xs text-emerald-400 font-medium">Escolha seu concurso:</p>
-                <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
-                  Importe a grade clássica com as matérias e assuntos principais. Você pode optar por substituir o edital atual ou apenas adicionar ao que já tem.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4">
-                {PREDEFINED_EDITALS.map((template, idx) => (
-                  <div key={idx} className="bg-zinc-950/40 border border-zinc-800/40 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-emerald-500/20 transition-all group">
-                    <div className="space-y-1.5 flex-1">
-                      <h3 className="text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">{template.name}</h3>
-                      <p className="text-xs text-zinc-500 leading-relaxed">{template.description}</p>
-                      <div className="flex flex-wrap gap-1 pt-1.5">
-                        {template.subjects.map((sub, sIdx) => (
-                          <span key={sIdx} className="bg-zinc-900 text-[10px] text-zinc-400 px-2 py-0.5 rounded border border-zinc-800">{sub.subject}</span>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div className="flex sm:flex-col gap-2 shrink-0">
-                      <button
-                        onClick={() => {
-                          importEdital(template.subjects);
-                          setIsTemplatesModalOpen(false);
-                          showToast(`${template.name} mesclado com sucesso!`, 'success');
-                        }}
-                        className="flex-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-755 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98]"
-                      >
-                        Mesclar
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm('Atenção: Isso irá APAGAR todas as matérias e tópicos atuais do seu edital. Deseja continuar?')) {
-                            deleteAllSubjects();
-                            importEdital(template.subjects);
-                            setIsTemplatesModalOpen(false);
-                            showToast(`${template.name} importado com sucesso!`, 'success');
-                          }
-                        }}
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98] shadow-md shadow-emerald-950/10"
-                      >
-                        Substituir
-                      </button>
-                    </div>
+              {templateTab === 'prontos' ? (
+                <>
+                  <div className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-xl">
+                    <p className="text-xs text-emerald-400 font-medium">Escolha seu concurso:</p>
+                    <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
+                      Importe a grade clássica com as matérias e assuntos principais. Você pode optar por substituir o edital atual ou apenas adicionar ao que já tem.
+                    </p>
                   </div>
-                ))}
-              </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    {PREDEFINED_EDITALS.map((template, idx) => (
+                      <div key={idx} className="bg-zinc-950/40 border border-zinc-800/40 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-emerald-500/20 transition-all group">
+                        <div className="space-y-1.5 flex-1">
+                          <h3 className="text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">{template.name}</h3>
+                          <p className="text-xs text-zinc-500 leading-relaxed">{template.description}</p>
+                          <div className="flex flex-wrap gap-1 pt-1.5">
+                            {template.subjects.map((sub, sIdx) => (
+                              <span key={sIdx} className="bg-zinc-900 text-[10px] text-zinc-400 px-2 py-0.5 rounded border border-zinc-800">{sub.subject}</span>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <div className="flex sm:flex-col gap-2 shrink-0">
+                          <button
+                            onClick={() => {
+                              importEdital(template.subjects, template.name);
+                              setIsTemplatesModalOpen(false);
+                              showToast(`${template.name} mesclado com sucesso!`, 'success');
+                            }}
+                            className="flex-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-755 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98]"
+                          >
+                            Mesclar
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm('Atenção: Isso irá APAGAR todas as matérias e tópicos atuais do seu edital. Deseja continuar?')) {
+                                deleteAllSubjects();
+                                importEdital(template.subjects, template.name);
+                                setIsTemplatesModalOpen(false);
+                                showToast(`${template.name} importado com sucesso!`, 'success');
+                              }
+                            }}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98] shadow-md shadow-emerald-950/10"
+                          >
+                            Substituir
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="bg-blue-500/5 border border-blue-500/10 p-4 rounded-xl">
+                    <p className="text-xs text-blue-400 font-medium flex items-center gap-2">
+                      <Users className="w-3.5 h-3.5" /> Editais de outros usuários
+                    </p>
+                    <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
+                      Veja os editais que outros estudantes da plataforma estão utilizando. Importe como base!
+                    </p>
+                  </div>
+
+                  {/* Barra de Busca */}
+                  <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 focus-within:ring-2 focus-within:ring-blue-500/30 transition-all">
+                    <Search className="w-4 h-4 text-zinc-500" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por nome, cargo ou carreira..."
+                      value={communitySearchTerm}
+                      onChange={(e) => setCommunitySearchTerm(e.target.value)}
+                      className="flex-1 bg-transparent text-sm text-zinc-200 focus:outline-none placeholder:text-zinc-600"
+                    />
+                  </div>
+
+                  {isLoadingCommunity ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-4">
+                      <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+                      <p className="text-zinc-400 text-sm font-medium">Carregando editais da comunidade...</p>
+                    </div>
+                  ) : communityEditals.length === 0 ? (
+                    <div className="text-center py-16 text-zinc-500 border border-dashed border-zinc-800 rounded-2xl">
+                      <Globe className="w-10 h-10 mx-auto mb-3 text-zinc-700" />
+                      <p className="text-sm font-medium">Nenhum edital da comunidade encontrado.</p>
+                      <p className="text-xs mt-1 text-zinc-600">Quando outros usuários cadastrarem editais, eles aparecerão aqui.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4">
+                      {communityEditals
+                        .filter(ce => {
+                          if (!communitySearchTerm.trim()) return true;
+                          const term = communitySearchTerm.toLowerCase();
+                          return (
+                            ce.name.toLowerCase().includes(term) ||
+                            ce.username.toLowerCase().includes(term) ||
+                            ce.cargo.toLowerCase().includes(term) ||
+                            ce.carreira.toLowerCase().includes(term) ||
+                            ce.subjects.some(s => s.subject.toLowerCase().includes(term))
+                          );
+                        })
+                        .map((ce) => (
+                        <div key={ce.uid} className="bg-zinc-950/40 border border-zinc-800/40 p-5 rounded-2xl hover:border-blue-500/20 transition-all group">
+                          <div className="flex items-start gap-4">
+                            {/* Avatar */}
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-zinc-700 overflow-hidden flex items-center justify-center shrink-0">
+                              {ce.avatar ? (
+                                <img src={ce.avatar} alt={ce.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              ) : (
+                                <UserCircle className="w-7 h-7 text-zinc-500" />
+                              )}
+                            </div>
+                            
+                            <div className="flex-1 min-w-0 space-y-2">
+                              <div>
+                                <h3 className="text-sm font-bold text-zinc-100 group-hover:text-blue-400 transition-colors">{ce.name}</h3>
+                                {ce.username && <p className="text-[11px] text-zinc-500">@{ce.username}</p>}
+                              </div>
+                              {(ce.cargo || ce.carreira) && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {ce.cargo && (
+                                    <span className="bg-blue-500/10 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-500/20">
+                                      {ce.cargo}
+                                    </span>
+                                  )}
+                                  {ce.carreira && (
+                                    <span className="bg-purple-500/10 text-purple-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-500/20">
+                                      {ce.carreira}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap gap-1 pt-1">
+                                {ce.subjects.slice(0, 8).map((sub, sIdx) => (
+                                  <span key={sIdx} className="bg-zinc-900 text-[10px] text-zinc-400 px-2 py-0.5 rounded border border-zinc-800">{sub.subject}</span>
+                                ))}
+                                {ce.subjects.length > 8 && (
+                                  <span className="text-[10px] text-zinc-500 px-1 py-0.5">+{ce.subjects.length - 8} matérias</span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-zinc-600">
+                                {ce.subjects.length} matérias • {ce.subjects.reduce((acc, s) => acc + s.topics.length, 0)} tópicos
+                              </p>
+                            </div>
+
+                            {/* Buttons */}
+                            <div className="flex flex-col gap-2 shrink-0">
+                              <button
+                                onClick={() => {
+                                  importEdital(ce.subjects, ce.name);
+                                  setIsTemplatesModalOpen(false);
+                                  showToast(`Edital de ${ce.name} mesclado com sucesso!`, 'success');
+                                }}
+                                className="bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-755 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98]"
+                              >
+                                Mesclar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Atenção: Isso irá SUBSTITUIR todas as matérias atuais pelo edital de ${ce.name}. Deseja continuar?`)) {
+                                    deleteAllSubjects();
+                                    importEdital(ce.subjects, ce.name);
+                                    setIsTemplatesModalOpen(false);
+                                    showToast(`Edital de ${ce.name} importado com sucesso!`, 'success');
+                                  }
+                                }}
+                                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98] shadow-md shadow-blue-950/10"
+                              >
+                                Substituir
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1149,6 +1386,98 @@ const PREDEFINED_EDITALS = [
       {
         subject: "Administração Pública",
         topics: ["Processo organizacional: planejamento, direção, controle", "Gestão de Pessoas", "Gestão de Materiais e Patrimônio", "Atendimento ao cidadão e ouvidoria"]
+      }
+    ]
+  },
+  {
+    name: "Delegado da Polícia Civil",
+    description: "Para a carreira de Delegado de Polícia Civil. Foco em investigação, direito penal e processual penal em profundidade. Sugerido por Orion.",
+    subjects: [
+      {
+        subject: "Direito Penal",
+        topics: ["Princípios de Direito Penal", "Aplicação da lei penal no tempo e no espaço", "Teoria do crime: tipicidade, ilicitude e culpabilidade", "Iter criminis e tentativa", "Concurso de pessoas", "Concurso de crimes", "Pena: espécies, aplicação e dosimetria", "Crimes contra a pessoa", "Crimes contra o patrimônio", "Crimes contra a dignidade sexual", "Crimes contra a fé pública", "Crimes contra a Administração Pública", "Crimes hediondos (Lei 8.072/90)", "Prescrição penal"]
+      },
+      {
+        subject: "Direito Processual Penal",
+        topics: ["Inquérito Policial: características, instauração e trâmite", "Ação Penal pública e privada", "Prova (perícias, testemunhas, interceptação telefônica)", "Medidas cautelares pessoais e reais", "Prisão em flagrante, preventiva e temporária", "Habeas Corpus e Mandado de Segurança em matéria criminal", "Procedimentos: ordinário, sumário e sumaríssimo", "Tribunal do Júri", "Nulidades processuais", "Recursos no processo penal"]
+      },
+      {
+        subject: "Direito Constitucional",
+        topics: ["Poder constituinte e classificação das Constituições", "Princípios fundamentais da CF/88", "Direitos e garantias fundamentais", "Remédios constitucionais", "Organização do Estado", "Segurança Pública (Art. 144 CF)", "Ordem Social", "Controle de constitucionalidade"]
+      },
+      {
+        subject: "Direito Administrativo",
+        topics: ["Princípios da Administração Pública", "Organização administrativa", "Atos administrativos", "Poderes da Administração", "Agentes públicos", "Responsabilidade civil do Estado", "Licitações e contratos (Lei 14.133/21)", "Improbidade administrativa (Lei 8.429/92)", "Processo administrativo disciplinar"]
+      },
+      {
+        subject: "Legislação Penal Especial",
+        topics: ["Lei de Drogas (Lei 11.343/06)", "Estatuto do Desarmamento (Lei 10.826/03)", "Lei Maria da Penha (Lei 11.340/06)", "Crimes de tortura (Lei 9.455/97)", "Abuso de autoridade (Lei 13.869/19)", "Organizações criminosas (Lei 12.850/13)", "Lavagem de capitais (Lei 9.613/98)", "Interceptação telefônica (Lei 9.296/96)", "Estatuto da Criança e do Adolescente (ECA)", "Lei de Execução Penal (Lei 7.210/84)", "Estatuto do Idoso (Lei 10.741/03)"]
+      },
+      {
+        subject: "Medicina Legal",
+        topics: ["Conceito e importância para o Delegado", "Documentos médico-legais (laudos, pareceres)", "Traumatologia forense", "Tanatologia forense", "Sexologia forense", "Toxicologia forense", "Identificação (dactiloscopia e DNA)"]
+      },
+      {
+        subject: "Português",
+        topics: ["Interpretação de textos", "Redação oficial", "Ortografia e acentuação", "Morfossintaxe", "Concordância nominal e verbal", "Regência e crase", "Pontuação"]
+      },
+      {
+        subject: "Criminologia",
+        topics: ["Conceito e objeto da Criminologia", "Teorias sociológicas do crime", "Vitimologia", "Prevenção do delito", "Controle social formal e informal"]
+      },
+      {
+        subject: "Direitos Humanos",
+        topics: ["Evolução histórica dos direitos humanos", "Declaração Universal dos Direitos Humanos", "Convenção Americana sobre Direitos Humanos (Pacto de San José)", "Direitos humanos na Constituição Federal", "Uso progressivo da força policial"]
+      }
+    ]
+  },
+  {
+    name: "Técnico em Radiologia - SESA-AP",
+    description: "Edital completo para Técnico em Radiologia na Secretaria de Saúde do Amapá (SESA-AP). Foco em saúde pública, radiologia e legislação do SUS. Sugerido por mmssil.",
+    subjects: [
+      {
+        subject: "Radiologia Convencional",
+        topics: ["Fundamentos da produção de raios X", "Equipamentos radiológicos e seus componentes", "Técnicas radiográficas (posicionamento e incidências)", "Radiografia do tórax, abdome, coluna e extremidades", "Critérios de avaliação da qualidade da imagem", "Artefatos e erros técnicos"]
+      },
+      {
+        subject: "Proteção Radiológica",
+        topics: ["Princípios da proteção radiológica (ALARA)", "Efeitos biológicos das radiações ionizantes", "Dosimetria e limites de dose", "Equipamentos de proteção individual (EPI) e coletiva (EPC)", "Normas da CNEN (Comissão Nacional de Energia Nuclear)", "Portaria 453/98 e RDC 330/2019 (ANVISA)"]
+      },
+      {
+        subject: "Tomografia Computadorizada (TC)",
+        topics: ["Princípios físicos da tomografia computadorizada", "Gerações de tomógrafos", "Protocolos de aquisição de imagem", "Meios de contraste iodados", "Anatomia seccional", "Artefatos e qualidade de imagem"]
+      },
+      {
+        subject: "Ressonância Magnética (RM)",
+        topics: ["Princípios físicos da ressonância magnética", "Segurança em RM (campos magnéticos e implantes)", "Sequências de pulso (T1, T2, FLAIR, difusão)", "Meios de contraste paramagnéticos (gadolínio)", "Artefatos específicos da RM"]
+      },
+      {
+        subject: "Mamografia",
+        topics: ["Anatomia mamária e incidências básicas (CC e MLO)", "Equipamento de mamografia e controle de qualidade", "Programa Nacional de Qualidade em Mamografia (PNQM)", "Classificação BI-RADS"]
+      },
+      {
+        subject: "Radioterapia e Medicina Nuclear (Noções)",
+        topics: ["Conceitos básicos de radioterapia", "Planejamento e simulação", "Noções de medicina nuclear e radiofármacos", "Cintilografia e PET-CT (noções)"]
+      },
+      {
+        subject: "Legislação do SUS",
+        topics: ["Lei 8.080/90 (Lei Orgânica da Saúde)", "Lei 8.142/90 (Participação e financiamento)", "Princípios e diretrizes do SUS", "Redes de Atenção à Saúde (RAS)", "Política Nacional de Atenção Básica (PNAB)", "Política Nacional de Humanização (HumanizaSUS)", "NOB-SUS e NOAS"]
+      },
+      {
+        subject: "Saúde Pública e Epidemiologia",
+        topics: ["Conceitos de epidemiologia", "Indicadores de saúde", "Vigilância em Saúde (epidemiológica, sanitária, ambiental)", "Determinantes sociais da saúde", "Programas de saúde (imunização, saúde da mulher, saúde do idoso)"]
+      },
+      {
+        subject: "Ética e Legislação Profissional",
+        topics: ["Código de Ética dos Profissionais de Radiologia (CONTER)", "Lei 7.394/85 (Regulamentação da profissão de Técnico em Radiologia)", "Decreto 92.790/86 (Regulamentação da Lei 7.394)", "Resoluções do CONTER"]
+      },
+      {
+        subject: "Português",
+        topics: ["Interpretação e compreensão de textos", "Ortografia e acentuação gráfica", "Concordância nominal e verbal", "Regência nominal e verbal", "Crase", "Pontuação"]
+      },
+      {
+        subject: "Informática Básica",
+        topics: ["Sistema operacional Windows e Linux", "Editores de texto (Word/LibreOffice Writer)", "Planilhas eletrônicas (Excel/LibreOffice Calc)", "Internet, navegadores e e-mail", "Noções de segurança da informação"]
       }
     ]
   }

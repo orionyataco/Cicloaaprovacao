@@ -13,17 +13,23 @@ import { useStore } from './store';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 import { auth } from './lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle, LogOut, Users, BookOpen, CheckCircle2, GraduationCap, RefreshCw, Sparkles } from 'lucide-react';
+import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle, LogOut, Users, BookOpen, CheckCircle2, GraduationCap, RefreshCw, Sparkles, Library } from 'lucide-react';
 import { Rankings } from './components/Rankings';
 import { cn } from './lib/utils';
 import { NotificationCenter } from './components/NotificationCenter';
+import { Cursos } from './components/Cursos';
 
-type View = 'dashboard' | 'edital' | 'flashcards' | 'ajudai' | 'simulados' | 'account' | 'rankings';
+type View = 'cursos' | 'dashboard' | 'edital' | 'flashcards' | 'ajudai' | 'simulados' | 'account' | 'rankings';
 
 export default function App() {
   useFirebaseSync();
+<<<<<<< HEAD
   const { userProfile, isAuthenticated, login, logout, isDemoMode, isHydrated } = useStore();
   const [currentView, setCurrentView] = useState<View>('dashboard');
+=======
+  const { userProfile, isAuthenticated, login, logout, isDemoMode } = useStore();
+  const [currentView, setCurrentView] = useState<View>('cursos');
+>>>>>>> e132630 (multiplos editais)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
 
@@ -46,6 +52,7 @@ export default function App() {
   };
 
   const navItems = [
+    { id: 'cursos', label: 'Meus Cursos', icon: Library },
     { id: 'dashboard', label: 'Relatórios de Performance', icon: LayoutDashboard },
     { id: 'edital', label: 'Meu Edital', icon: ListTodo },
     { id: 'simulados', label: 'Simulados e Questões', icon: Trophy },
@@ -282,6 +289,7 @@ export default function App() {
         {/* View Area */}
         <div className="flex-1 overflow-y-auto p-4 lg:p-8 scroll-smooth">
           <div className="max-w-5xl mx-auto pb-24">
+            {currentView === 'cursos' && <Cursos onViewChange={handleViewChange} />}
             {currentView === 'dashboard' && <Dashboard />}
             {currentView === 'edital' && <Edital onViewChange={handleViewChange} />}
             {currentView === 'flashcards' && <Flashcards />}

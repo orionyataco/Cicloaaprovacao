@@ -22,11 +22,21 @@ export interface SharedQuestion {
   date: string;
   question: GeneratedQuestion;
 }
+export interface SavedCourse {
+  id: string;
+  name: string;
+  subjects: Subject[];
+  topics: Topic[];
+  editalInfo: EditalInfo;
+  scheduleConfig: ScheduleConfig;
+  currentCycleIndex: number;
+}
 
 export interface Subject {
   id: string;
   name: string;
   color: string;
+  courseName?: string;
 }
 
 export interface Topic {
@@ -150,6 +160,8 @@ export interface AppNotification {
 }
 
 interface AppState {
+  savedCourses: SavedCourse[];
+  activeCourseId: string | null;
   subjects: Subject[];
   topics: Topic[];
   questionLogs: QuestionLog[];
@@ -199,7 +211,7 @@ interface AppState {
   reviewFlashcard: (id: string, quality: number) => void;
   addSimulado: (simulado: Omit<Simulado, 'id'>) => void;
   deleteSimulado: (id: string) => void;
-  importEdital: (data: { subject: string; topics: string[] }[]) => void;
+  importEdital: (data: { subject: string; topics: string[] }[], courseName?: string) => void;
   deleteSubject: (id: string) => void;
   deleteAllSubjects: () => void;
   updateEditalInfo: (info: Partial<EditalInfo>) => void;
@@ -224,6 +236,11 @@ interface AppState {
   updateWrongQuestionErrorReason: (id: string, reason: WrongQuestionErrorReason) => void;
   updateWrongQuestionAiAnalysis: (id: string, analysis: string) => void;
   deleteWrongQuestion: (id: string) => void;
+
+  createCourse: (name: string) => void;
+  switchCourse: (id: string) => void;
+  deleteCourse: (id: string) => void;
+  updateCourseName: (id: string, name: string) => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -231,6 +248,8 @@ const generateId = () => Math.random().toString(36).substring(2, 9);
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
+      savedCourses: [],
+      activeCourseId: null,
       subjects: [],
       topics: [],
       questionLogs: [],
@@ -314,28 +333,71 @@ export const useStore = create<AppState>()(
         autoGenerateTopicId: null 
       }),
 
-      updateTopicLinks: (id, links) => set((state) => ({
-        topics: state.topics.map(t => t.id === id ? { ...t, ...links } : t)
-      })),
+      updateTopicLinks: (id, links) => set((state) => {
+        const target = state.topics.find(t => t.id === id);
+        if (!target) return state;
+        const targetSub = state.subjects.find(s => s.id === target.subjectId);
+
+        return {
+          topics: state.topics.map(t => {
+            if (t.id === id) return { ...t, ...links };
+            if (targetSub) {
+              const s = state.subjects.find(sub => sub.id === t.subjectId);
+              if (s && s.name.trim().toLowerCase() === targetSub.name.trim().toLowerCase() && 
+                  t.name.trim().toLowerCase() === target.name.trim().toLowerCase()) {
+                return { ...t, ...links };
+              }
+            }
+            return t;
+          })
+        };
+      }),
       
-      updateTopicSummary: (id, summary) => set((state) => ({
-        topics: state.topics.map(t => t.id === id ? { ...t, summary } : t)
-      })),
+      updateTopicSummary: (id, summary) => set((state) => {
+        const target = state.topics.find(t => t.id === id);
+        if (!target) return state;
+        const targetSub = state.subjects.find(s => s.id === target.subjectId);
+
+        return {
+          topics: state.topics.map(t => {
+            if (t.id === id) return { ...t, summary };
+            if (targetSub) {
+              const s = state.subjects.find(sub => sub.id === t.subjectId);
+              if (s && s.name.trim().toLowerCase() === targetSub.name.trim().toLowerCase() && 
+                  t.name.trim().toLowerCase() === target.name.trim().toLowerCase()) {
+                return { ...t, summary };
+              }
+            }
+            return t;
+          })
+        };
+      }),
 
       updateTopicStatus: (id, status) => set((state) => {
         const now = new Date().toISOString();
-        const topic = state.topics.find(t => t.id === id);
-        // Avança o ciclo quando um tópico sai de NOT_READ (ex: marcou "Teoria Concluída")
-        // Isso garante que o próximo slot do ciclo será de uma matéria diferente
-        const shouldAdvanceCycle = topic && topic.status === 'NOT_READ' && status !== 'NOT_READ';
+        const mainTopic = state.topics.find(t => t.id === id);
+        if (!mainTopic) return state;
+
+        const mainSubject = state.subjects.find(s => s.id === mainTopic.subjectId);
+        const shouldAdvanceCycle = mainTopic.status === 'NOT_READ' && status !== 'NOT_READ';
 
         return {
           topics: state.topics.map((t) => {
-            if (t.id === id) {
+            const isTarget = t.id === id;
+            let isSemanticSibling = false;
+            
+            if (!isTarget && mainSubject) {
+              const s = state.subjects.find(sub => sub.id === t.subjectId);
+              if (s && s.name.trim().toLowerCase() === mainSubject.name.trim().toLowerCase() && 
+                  t.name.trim().toLowerCase() === mainTopic.name.trim().toLowerCase()) {
+                isSemanticSibling = true;
+              }
+            }
+
+            if (isTarget || isSemanticSibling) {
               let nextReviewAt = t.nextReviewAt;
               let reviewCount = t.reviewCount;
               
-              // If moving to a "done" state, schedule first review (24h)
               if (status !== 'NOT_READ' && t.status === 'NOT_READ') {
                 nextReviewAt = addDays(new Date(), 1).toISOString();
                 reviewCount = 1;
@@ -343,9 +405,9 @@ export const useStore = create<AppState>()(
 
               return { ...t, status, lastStudiedAt: now, nextReviewAt, reviewCount };
             }
+            
             return t;
           }),
-          // Avança para a próxima matéria no ciclo
           currentCycleIndex: shouldAdvanceCycle && state.subjects.length > 0
             ? (state.currentCycleIndex + 1) % state.subjects.length
             : state.currentCycleIndex,
@@ -444,7 +506,7 @@ export const useStore = create<AppState>()(
         simulados: state.simulados.filter(s => s.id !== id)
       })),
 
-      importEdital: (data) => set((state) => {
+      importEdital: (data, courseName?: string) => set((state) => {
         if (!Array.isArray(data)) return state;
 
         const newSubjects = [...state.subjects];
@@ -457,7 +519,8 @@ export const useStore = create<AppState>()(
           newSubjects.push({
             id: subjectId,
             name: String(item.subject),
-            color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
+            color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`,
+            courseName: courseName // Add o nome do Curso/Edital
           });
 
           item.topics.forEach(topicName => {
@@ -652,6 +715,132 @@ export const useStore = create<AppState>()(
         isDemoMode: false,
         isHydrated: false,
       }),
+
+      createCourse: (name: string) => set((state) => {
+        const id = generateId();
+        const newCourse: SavedCourse = {
+          id,
+          name,
+          subjects: [],
+          topics: [],
+          editalInfo: { carreira: '', cargo: '', banca: '', remuneracao: '', vagas: '', periodoInscricao: '', valorInscricao: '', siteConcurso: '', dataProva: '' },
+          scheduleConfig: { hoursPerDay: 4, activeDays: [1, 2, 3, 4, 5] },
+          currentCycleIndex: 0
+        };
+
+        let updatedSavedCourses = [...state.savedCourses];
+        if (state.activeCourseId) {
+          const currentIndex = updatedSavedCourses.findIndex(c => c.id === state.activeCourseId);
+          if (currentIndex !== -1) {
+            updatedSavedCourses[currentIndex] = {
+              ...updatedSavedCourses[currentIndex],
+              subjects: state.subjects,
+              topics: state.topics,
+              editalInfo: state.editalInfo,
+              scheduleConfig: state.scheduleConfig,
+              currentCycleIndex: state.currentCycleIndex
+            };
+          }
+        } else if (state.subjects.length > 0) {
+           updatedSavedCourses.push({
+             id: 'default_migration',
+             name: 'Edital Principal',
+             subjects: state.subjects,
+             topics: state.topics,
+             editalInfo: state.editalInfo,
+             scheduleConfig: state.scheduleConfig,
+             currentCycleIndex: state.currentCycleIndex
+           });
+        }
+        
+        updatedSavedCourses.push(newCourse);
+        
+        return {
+          savedCourses: updatedSavedCourses,
+          activeCourseId: id,
+          subjects: newCourse.subjects,
+          topics: newCourse.topics,
+          editalInfo: newCourse.editalInfo,
+          scheduleConfig: newCourse.scheduleConfig,
+          currentCycleIndex: newCourse.currentCycleIndex
+        };
+      }),
+
+      switchCourse: (id: string) => set((state) => {
+        if (state.activeCourseId === id) return state;
+
+        let updatedSavedCourses = [...state.savedCourses];
+        
+        if (state.activeCourseId) {
+          const currentIndex = updatedSavedCourses.findIndex(c => c.id === state.activeCourseId);
+          if (currentIndex !== -1) {
+            updatedSavedCourses[currentIndex] = {
+              ...updatedSavedCourses[currentIndex],
+              subjects: state.subjects,
+              topics: state.topics,
+              editalInfo: state.editalInfo,
+              scheduleConfig: state.scheduleConfig,
+              currentCycleIndex: state.currentCycleIndex
+            };
+          }
+        } else if (state.subjects.length > 0) {
+           updatedSavedCourses.push({
+             id: 'default_migration',
+             name: 'Edital Principal',
+             subjects: state.subjects,
+             topics: state.topics,
+             editalInfo: state.editalInfo,
+             scheduleConfig: state.scheduleConfig,
+             currentCycleIndex: state.currentCycleIndex
+           });
+        }
+
+        const targetCourse = updatedSavedCourses.find(c => c.id === id);
+        if (!targetCourse) return { savedCourses: updatedSavedCourses };
+
+        return {
+          savedCourses: updatedSavedCourses,
+          activeCourseId: id,
+          subjects: targetCourse.subjects,
+          topics: targetCourse.topics,
+          editalInfo: targetCourse.editalInfo,
+          scheduleConfig: targetCourse.scheduleConfig,
+          currentCycleIndex: targetCourse.currentCycleIndex
+        };
+      }),
+
+      deleteCourse: (id: string) => set((state) => {
+         const newSaved = state.savedCourses.filter(c => c.id !== id);
+         
+         if (state.activeCourseId === id) {
+             const fallback = newSaved[newSaved.length - 1]; // Pega o ultimo ou undefined
+             if (fallback) {
+                return {
+                  savedCourses: newSaved,
+                  activeCourseId: fallback.id,
+                  subjects: fallback.subjects,
+                  topics: fallback.topics,
+                  editalInfo: fallback.editalInfo,
+                  scheduleConfig: fallback.scheduleConfig,
+                  currentCycleIndex: fallback.currentCycleIndex
+                };
+             } else {
+                return {
+                  savedCourses: newSaved,
+                  activeCourseId: null,
+                  subjects: [],
+                  topics: [],
+                  currentCycleIndex: 0,
+                  editalInfo: { carreira: '', cargo: '', banca: '', remuneracao: '', vagas: '', periodoInscricao: '', valorInscricao: '', siteConcurso: '', dataProva: '' }
+                };
+             }
+         }
+         return { savedCourses: newSaved };
+      }),
+      
+      updateCourseName: (id: string, name: string) => set((state) => ({
+         savedCourses: state.savedCourses.map(c => c.id === id ? { ...c, name } : c)
+      })),
 
       startTimer: (topicId) => set({ 
         timerStartTime: new Date().toISOString(), 
