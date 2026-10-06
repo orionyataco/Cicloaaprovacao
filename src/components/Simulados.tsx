@@ -1088,6 +1088,7 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO, SEM TEXTO FORA DO JSON:
                         setActiveSharedId(shared.id);
                         setActiveSharedSenderUid(shared.fromUid);
                         setUserAnswers({});
+                        setExamFinished(false);
                         setScissorModeActive({});
                         setCrossedOptions({});
                         setExamStartTime(Date.now());
