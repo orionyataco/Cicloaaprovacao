@@ -334,6 +334,16 @@ export function useFirebaseSync() {
               subject: s.name,
               topics: store.topics.filter(t => t.subjectId === s.id).slice(0, 50).map(t => t.name)
             })),
+            allEditals: store.savedCourses.map(course => ({
+              id: course.id,
+              name: course.name,
+              cargo: course.editalInfo?.cargo || '',
+              carreira: course.editalInfo?.carreira || '',
+              structure: course.subjects.slice(0, 50).map(s => ({
+                subject: s.name,
+                topics: course.topics.filter(t => t.subjectId === s.id).slice(0, 50).map(t => t.name)
+              }))
+            })),
             stats: {
               totalQuestions,
               totalCorrect,

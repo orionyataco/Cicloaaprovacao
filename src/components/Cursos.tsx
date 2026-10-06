@@ -70,7 +70,20 @@ export function Cursos({ onViewChange }: CursosProps) {
         
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
-          if (data.editalStructure && Array.isArray(data.editalStructure) && data.editalStructure.length > 0 && docSnap.id !== currentUid) {
+          
+          if (data.allEditals && Array.isArray(data.allEditals) && data.allEditals.length > 0) {
+            data.allEditals.forEach((course: any) => {
+              results.push({
+                uid: docSnap.id,
+                name: data.name || 'Estudante',
+                username: data.username || '',
+                avatar: data.avatar || null,
+                cargo: course.cargo || course.name || 'Curso Personalizado',
+                carreira: course.carreira || '',
+                subjects: course.structure || [],
+              });
+            });
+          } else if (data.editalStructure && Array.isArray(data.editalStructure) && data.editalStructure.length > 0) {
             results.push({
               uid: docSnap.id,
               name: data.name || 'Estudante',
