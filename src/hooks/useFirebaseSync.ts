@@ -337,8 +337,9 @@ export function useFirebaseSync() {
             allEditals: store.savedCourses.map(course => ({
               id: course.id,
               name: course.name,
-              cargo: course.editalInfo?.cargo || '',
+              cargo: course.editalInfo?.cargo || course.name || '',
               carreira: course.editalInfo?.carreira || '',
+              editalInfo: course.editalInfo || {},
               structure: course.subjects.slice(0, 50).map(s => ({
                 subject: s.name,
                 topics: course.topics.filter(t => t.subjectId === s.id).slice(0, 50).map(t => t.name)

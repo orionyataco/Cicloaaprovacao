@@ -15,6 +15,7 @@ interface CommunityEdital {
   avatar: string | null;
   cargo: string;
   carreira: string;
+  editalInfo?: any;
   subjects: { subject: string; topics: string[] }[];
 }
 
@@ -80,6 +81,7 @@ export function Cursos({ onViewChange }: CursosProps) {
                 avatar: data.avatar || null,
                 cargo: course.cargo || course.name || 'Curso Personalizado',
                 carreira: course.carreira || '',
+                editalInfo: course.editalInfo || {},
                 subjects: course.structure || [],
               });
             });
@@ -91,6 +93,7 @@ export function Cursos({ onViewChange }: CursosProps) {
               avatar: data.avatar || null,
               cargo: data.editalInfo?.cargo || '',
               carreira: data.editalInfo?.carreira || '',
+              editalInfo: data.editalInfo || {},
               subjects: data.editalStructure,
             });
           }
@@ -110,7 +113,9 @@ export function Cursos({ onViewChange }: CursosProps) {
     createCourse(newName);
     // A importação deve puxar do curso recém ativado (sincrono graças à store)
     useStore.getState().importEdital(course.subjects, newName);
-    useStore.getState().updateEditalInfo({ cargo: course.cargo, carreira: course.carreira });
+    
+    const infoToUpdate = course.editalInfo || { cargo: course.cargo, carreira: course.carreira };
+    useStore.getState().updateEditalInfo(infoToUpdate);
     onViewChange('edital');
   };
 
