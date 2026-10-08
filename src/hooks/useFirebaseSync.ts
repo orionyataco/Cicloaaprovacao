@@ -41,12 +41,10 @@ export function useFirebaseSync() {
           isHydrating.current = false;
           setHasHydrated(false);
         } else if (!currentStoreUid) {
-          // Se não havia UID mas o store tem dados (ex: lixo no localStorage), limpa
-          const isDirty = useStore.getState().subjects.length > 0 || useStore.getState().userProfile.username !== '';
-          if (isDirty) {
-            console.log('[Firebase] 🧹 Store sujo s/ UID detectado. Limpando...');
-            useStore.getState().resetAllData();
-          }
+          // Não há UID no store: pode ser que o localStorage ainda não hidratou,
+          // ou que o usuário era anônimo. NÃO apagamos os dados locais aqui,
+          // pois podem ser dados legítimos do próprio usuário. A lógica de
+          // shouldOverwrite abaixo irá reconciliar os dados com o Firebase.
           useStore.getState().setUid(user.uid);
         }
 
