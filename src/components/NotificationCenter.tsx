@@ -93,11 +93,26 @@ export function NotificationCenter() {
 
       {isOpen && (
         <>
+          {/* Backdrop */}
           <div 
-            className="fixed inset-0 z-40 bg-transparent" 
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" 
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute right-0 mt-3 w-80 max-w-[calc(100vw-24px)] sm:w-96 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+
+          {/* Mobile: drawer fixo na parte inferior; Desktop: dropdown absoluto */}
+          <div className={cn(
+            "z-50 bg-zinc-900 border-zinc-800 overflow-hidden",
+            // Mobile: ocupa a tela toda como bottom sheet
+            "fixed bottom-0 left-0 right-0 rounded-t-2xl border-t border-x",
+            "sm:absolute sm:bottom-auto sm:left-auto sm:right-0 sm:top-full sm:mt-3",
+            "sm:w-96 sm:rounded-2xl sm:border sm:shadow-2xl",
+            "animate-in fade-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200"
+          )}>
+            {/* Handle visual para mobile */}
+            <div className="flex justify-center pt-3 pb-1 sm:hidden">
+              <div className="w-10 h-1 rounded-full bg-zinc-700" />
+            </div>
+
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
               <div className="flex items-center gap-4">
                 <h3 className="font-bold text-zinc-100 flex items-center gap-2">
@@ -120,7 +135,8 @@ export function NotificationCenter() {
               </button>
             </div>
 
-            <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+            {/* Altura máxima adaptada: 70vh em mobile, 400px em desktop */}
+            <div className="max-h-[70vh] sm:max-h-[400px] overflow-y-auto custom-scrollbar">
               {notifications.length > 0 ? (
                 notifications.map((notification) => (
                   <div 
@@ -198,8 +214,9 @@ export function NotificationCenter() {
               )}
             </div>
             
+            {/* Rodapé com safe area para dispositivos com home indicator */}
             {notifications.length > 0 && (
-              <div className="p-3 bg-zinc-900 border-t border-zinc-800 text-center">
+              <div className="p-3 pb-safe bg-zinc-900 border-t border-zinc-800 text-center" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
                 <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">
                   Notificações sincronizadas com a nuvem
                 </p>
