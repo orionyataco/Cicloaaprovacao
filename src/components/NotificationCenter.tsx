@@ -5,11 +5,11 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
-import { db } from '@/lib/firebase';
-import { doc, updateDoc, deleteDoc as deleteCloudDoc, writeBatch } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { doc, updateDoc, deleteDoc as deleteCloudDoc, writeBatch, collection, addDoc } from 'firebase/firestore';
 
 export function NotificationCenter() {
-  const { notifications, markNotificationAsRead, deleteNotification, deleteAllNotifications } = useStore();
+  const { notifications, markNotificationAsRead, deleteNotification, deleteAllNotifications, followingIds, followUser, userProfile } = useStore();
   const [isOpen, setIsOpen] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -45,6 +45,23 @@ export function NotificationCenter() {
       await batch.commit();
     } catch (err) {
       console.error('Erro ao apagar todas as notificações no cloud:', err);
+    }
+  };
+
+  const handleFollowBack = async (targetUid: string) => {
+    followUser(targetUid);
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        toUid: targetUid,
+        fromUid: auth.currentUser?.uid,
+        type: 'follow',
+        title: 'Novo seguidor!',
+        message: `${userProfile.name} começou a seguir você.`,
+        date: new Date().toISOString(),
+        read: false
+      });
+    } catch (err) {
+      console.error('Erro ao enviar notificação de follow:', err);
     }
   };
 
@@ -147,6 +164,20 @@ export function NotificationCenter() {
                           >
                             <Check className="w-3 h-3" /> MARCAR COMO LIDA
                           </button>
+                        )}
+                        {notification.type === 'follow' && notification.fromUid && (
+                          followingIds.includes(notification.fromUid) ? (
+                            <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1">
+                              <Check className="w-3 h-3" /> SEGUINDO
+                            </span>
+                          ) : (
+                            <button 
+                              onClick={() => handleFollowBack(notification.fromUid!)}
+                              className="text-[10px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
+                            >
+                              <UserPlus className="w-3 h-3" /> SEGUIR DE VOLTA
+                            </button>
+                          )
                         )}
                         <button 
                           onClick={() => handleDelete(notification.id)}

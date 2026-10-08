@@ -66,6 +66,10 @@ export function Rankings() {
   const [globalTop, setGlobalTop] = useState<PublicProfile[]>([]);
   const [loadingGlobal, setLoadingGlobal] = useState(false);
 
+  // Seguidores: perfis que seguem o usuário atual
+  const [followers, setFollowers] = useState<PublicProfile[]>([]);
+  const [isLoadingFollowers, setIsLoadingFollowers] = useState(false);
+
   const [selectedUser, setSelectedUser] = useState<PublicProfile | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -111,7 +115,7 @@ export function Rankings() {
     fetchWeekly();
   }, [weeklyRankingFriendIds]);
 
-  // Fetch Global Top 5 to show active users
+  // Fetch Global Top to show active users
   useEffect(() => {
     const fetchGlobal = async () => {
       if (!isFirebaseConfigured()) return;
@@ -120,10 +124,14 @@ export function Rankings() {
         const q = query(
           collection(db, 'profiles'), 
           orderBy('stats.totalQuestions', 'desc'),
-          limit(5)
+          limit(8)
         );
         const snap = await getDocs(q);
-        setGlobalTop(snap.docs.map(doc => doc.data() as PublicProfile));
+        const myUid = auth.currentUser?.uid;
+        setGlobalTop(snap.docs
+          .map(doc => doc.data() as PublicProfile)
+          .filter(p => p.uid !== myUid)
+        );
       } catch (err) {
         console.error('Erro ao buscar ranking global:', err);
       } finally {
@@ -132,6 +140,30 @@ export function Rankings() {
     };
     fetchGlobal();
   }, []);
+
+  // Busca quem segue o usuário atual (followers)
+  useEffect(() => {
+    const fetchFollowers = async () => {
+      if (!isFirebaseConfigured() || !auth.currentUser?.uid) return;
+      setIsLoadingFollowers(true);
+      try {
+        const myUid = auth.currentUser.uid;
+        // Busca perfis onde followingIds contém o UID do usuário atual
+        const q = query(
+          collection(db, 'profiles'),
+          where('followingIds', 'array-contains', myUid),
+          limit(30)
+        );
+        const snap = await getDocs(q);
+        setFollowers(snap.docs.map(doc => doc.data() as PublicProfile));
+      } catch (err) {
+        console.error('Erro ao buscar seguidores:', err);
+      } finally {
+        setIsLoadingFollowers(false);
+      }
+    };
+    fetchFollowers();
+  }, [followingIds]); // re-busca quando o usuario segue alguem (pode ter gerado follow-back)
 
   const handleFollowAction = async (targetUid: string, targetName: string) => {
     followUser(targetUid);
@@ -446,7 +478,11 @@ export function Rankings() {
               Alunos em Destaque (Global)
             </h2>
             <div className="space-y-3">
-              {globalTop.map((profile) => (
+              {loadingGlobal ? (
+                <div className="text-center py-6 text-zinc-600 text-sm">Carregando...</div>
+              ) : globalTop.length === 0 ? (
+                <div className="text-center py-6 text-zinc-600 text-sm italic">Nenhum usuário encontrado.</div>
+              ) : globalTop.map((profile) => (
                 <div key={profile.uid} className="flex items-center justify-between p-3 bg-zinc-800/20 rounded-xl border border-zinc-800/50">
                    <button 
                       onClick={() => setSelectedUser(profile)}
@@ -467,6 +503,47 @@ export function Rankings() {
                         <button onClick={() => handleFollowAction(profile.uid, profile.name)} className="text-[10px] bg-blue-600/10 text-blue-400 px-2 py-1 rounded-md border border-blue-500/30">Seguir</button>
                       )
                     )}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Seção: Seguidores (quem te segue) */}
+          <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+            <h2 className="text-lg font-bold text-zinc-100 mb-1 flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-emerald-400" />
+              Seguidores
+            </h2>
+            <p className="text-[10px] text-zinc-500 mb-4">Usuários que seguem você — siga de volta para compar os rankings!</p>
+            <div className="space-y-3">
+              {isLoadingFollowers ? (
+                <div className="text-center py-6 text-zinc-600 text-sm">Carregando...</div>
+              ) : followers.length === 0 ? (
+                <div className="text-center py-6 text-zinc-700 text-sm italic">Nenhum seguidor ainda.</div>
+              ) : followers.map((profile) => (
+                <div key={profile.uid} className="flex items-center justify-between p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                  <button
+                    onClick={() => setSelectedUser(profile)}
+                    className="flex items-center gap-3 flex-1 text-left"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-zinc-900 border border-emerald-500/20 overflow-hidden shrink-0">
+                      {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <UserCircle className="w-full h-full text-zinc-800 p-1" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-zinc-100 truncate">{profile.name}</div>
+                      <div className="text-[10px] text-zinc-500 italic">@{profile.username}</div>
+                    </div>
+                  </button>
+                  {followingIds.includes(profile.uid) ? (
+                    <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-md border border-emerald-500/20 font-bold">Seguindo ✓</span>
+                  ) : (
+                    <button
+                      onClick={() => handleFollowAction(profile.uid, profile.name)}
+                      className="text-[10px] bg-blue-600/10 text-blue-400 px-2 py-1 rounded-md border border-blue-500/30 font-bold hover:bg-blue-600/20 transition-colors"
+                    >
+                      Seguir de volta
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

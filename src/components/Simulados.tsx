@@ -515,6 +515,17 @@ RETORNE EXCLUSIVAMENTE UM ARRAY JSON VÁLIDO, SEM TEXTO FORA DO JSON:
         question: questionToShare,
         timestamp: serverTimestamp()
       });
+      
+      await addDoc(collection(db, 'notifications'), {
+        toUid: friendUid,
+        fromUid: auth.currentUser.uid,
+        type: 'flashcard',
+        title: 'Nova questão compartilhada!',
+        message: `${userProfile.name} compartilhou uma questão com você.`,
+        date: new Date().toISOString(),
+        read: false
+      });
+      
       alert('Questão compartilhada com sucesso!');
       setIsShareModalOpen(false);
       setFriendSearchQuery('');

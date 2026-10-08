@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store';
-import { Library, Plus, ArrowRight, BookOpen, Clock, Settings, Edit2, Check, X, Globe, UserCircle, Search } from 'lucide-react';
+import { Library, Plus, ArrowRight, BookOpen, Clock, Settings, Edit2, Check, X, Globe, UserCircle, Search, Users } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { calculateCourseCompatibility } from '../lib/semanticMatch';
 import { format } from 'date-fns';
@@ -9,6 +9,9 @@ import { db, isFirebaseConfigured } from '../lib/firebase';
 import { collection, query, limit, getDocs } from 'firebase/firestore';
 
 interface CommunityEdital {
+  // Identificador único baseado no cargo+carreira para agrupamento
+  key: string;
+  // UID do primeiro usuário que compartilhou este curso (usado para exibir avatar)
   uid: string;
   name: string;
   username: string;
@@ -17,6 +20,8 @@ interface CommunityEdital {
   carreira: string;
   editalInfo?: any;
   subjects: { subject: string; topics: string[] }[];
+  // Quantos usuários da comunidade estão fazendo este mesmo curso
+  userCount: number;
 }
 
 interface CursosProps {
@@ -67,38 +72,62 @@ export function Cursos({ onViewChange }: CursosProps) {
         const currentUid = useStore.getState().uid;
         const profilesRef = collection(db, 'profiles');
         const snapshot = await getDocs(query(profilesRef, limit(50)));
-        const results: CommunityEdital[] = [];
-        
+
+        // Mapa para agrupar cursos pelo cargo+carreira (evita duplicatas)
+        const courseMap = new Map<string, CommunityEdital>();
+
         snapshot.forEach((docSnap) => {
+          // Não exibe o próprio usuário no explorar comunidade
+          if (docSnap.id === currentUid) return;
+
           const data = docSnap.data();
-          
-          if (data.allEditals && Array.isArray(data.allEditals) && data.allEditals.length > 0) {
-            data.allEditals.forEach((course: any) => {
-              results.push({
+
+          const processCourse = (cargo: string, carreira: string, subjects: any[], editalInfo: any) => {
+            if (!subjects || subjects.length === 0) return;
+            // Chave de agrupamento: normaliza cargo+carreira em minúsculas
+            const key = `${(cargo || '').toLowerCase().trim()}||${(carreira || '').toLowerCase().trim()}`;
+
+            if (courseMap.has(key)) {
+              // Curso já existe no mapa: apenas incrementa o contador de usuários
+              const existing = courseMap.get(key)!;
+              existing.userCount += 1;
+            } else {
+              // Novo curso: adiciona ao mapa
+              courseMap.set(key, {
+                key,
                 uid: docSnap.id,
                 name: data.name || 'Estudante',
                 username: data.username || '',
                 avatar: data.avatar || null,
-                cargo: course.cargo || course.name || 'Curso Personalizado',
-                carreira: course.carreira || '',
-                editalInfo: course.editalInfo || {},
-                subjects: course.structure || [],
+                cargo: cargo || 'Curso Personalizado',
+                carreira: carreira || '',
+                editalInfo: editalInfo || {},
+                subjects,
+                userCount: 1,
               });
+            }
+          };
+
+          if (data.allEditals && Array.isArray(data.allEditals) && data.allEditals.length > 0) {
+            data.allEditals.forEach((course: any) => {
+              processCourse(
+                course.cargo || course.name || '',
+                course.carreira || '',
+                course.structure || [],
+                course.editalInfo || {}
+              );
             });
           } else if (data.editalStructure && Array.isArray(data.editalStructure) && data.editalStructure.length > 0) {
-            results.push({
-              uid: docSnap.id,
-              name: data.name || 'Estudante',
-              username: data.username || '',
-              avatar: data.avatar || null,
-              cargo: data.editalInfo?.cargo || '',
-              carreira: data.editalInfo?.carreira || '',
-              editalInfo: data.editalInfo || {},
-              subjects: data.editalStructure,
-            });
+            processCourse(
+              data.editalInfo?.cargo || '',
+              data.editalInfo?.carreira || '',
+              data.editalStructure,
+              data.editalInfo || {}
+            );
           }
         });
-        setCommunityEditals(results);
+
+        setCommunityEditals(Array.from(courseMap.values()));
       } catch (err) {
         console.error('Erro na comunidade:', err);
       } finally {
@@ -365,39 +394,35 @@ export function Cursos({ onViewChange }: CursosProps) {
                 );
               })
               .map(ce => (
-                <div key={ce.uid} className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl hover:border-blue-500/30 transition-all flex flex-col group relative overflow-hidden">
+                <div key={ce.key} className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl hover:border-blue-500/30 transition-all flex flex-col group relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-bl-full -z-10 group-hover:bg-blue-500/10 transition-colors" />
-                  
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-zinc-700 overflow-hidden flex items-center justify-center shrink-0">
-                      {ce.avatar ? (
-                        <img src={ce.avatar} alt={ce.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        <UserCircle className="w-6 h-6 text-zinc-500" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-bold text-zinc-200 truncate group-hover:text-blue-400 transition-colors">{ce.name}</h3>
-                      {ce.username && <p className="text-[10px] text-zinc-500 truncate">@{ce.username}</p>}
-                    </div>
-                  </div>
 
-                  <div className="flex flex-col gap-1.5 flex-1 mb-5">
+                  {/* Cabeçalho do card: focado no curso, não no usuário */}
+                  <div className="flex flex-col gap-1.5 flex-1 mb-4">
                     {(ce.cargo || ce.carreira) ? (
                       <div className="flex flex-col gap-1">
-                        {ce.cargo && <span className="bg-blue-500/10 text-blue-400 text-xs font-semibold px-2 py-1 rounded line-clamp-2 truncate">{ce.cargo}</span>}
+                        {ce.cargo && <h3 className="text-sm font-bold text-zinc-100 group-hover:text-blue-400 transition-colors line-clamp-2">{ce.cargo}</h3>}
                         {ce.carreira && <span className="bg-zinc-800 text-zinc-400 text-[10px] uppercase font-bold px-2 py-1 rounded truncate w-fit">{ce.carreira}</span>}
                       </div>
                     ) : (
-                      <span className="text-zinc-600 text-xs italic">Cargo indefinido</span>
+                      <h3 className="text-sm font-bold text-zinc-500 italic">Cargo indefinido</h3>
                     )}
+
                     <div className="mt-2 pt-2 border-t border-zinc-800 flex justify-between items-center">
-                       <span className="text-xs font-medium text-zinc-400">{ce.subjects.length} Matérias</span>
-                       <span className="text-[10px] text-zinc-600 font-bold bg-zinc-950 px-1.5 py-0.5 rounded">{ce.subjects.reduce((a, b) => a + b.topics.length, 0)} Tópicos</span>
+                      <span className="text-xs font-medium text-zinc-400">{ce.subjects.length} Matérias</span>
+                      <span className="text-[10px] text-zinc-600 font-bold bg-zinc-950 px-1.5 py-0.5 rounded">{ce.subjects.reduce((a, b) => a + b.topics.length, 0)} Tópicos</span>
+                    </div>
+
+                    {/* Badge de usuários fazendo este curso */}
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Users className="w-3.5 h-3.5 text-blue-400/70" />
+                      <span className="text-[11px] text-blue-400/80 font-semibold">
+                        {ce.userCount === 1 ? '1 estudante fazendo este curso' : `${ce.userCount} estudantes fazendo este curso`}
+                      </span>
                     </div>
                   </div>
 
-                  <button 
+                  <button
                     onClick={() => joinCommunityCourse(ce)}
                     className="w-full bg-zinc-950 hover:bg-blue-600 text-zinc-300 hover:text-white border border-zinc-800 hover:border-blue-500 py-2.5 rounded-xl font-bold text-sm transition-all"
                   >

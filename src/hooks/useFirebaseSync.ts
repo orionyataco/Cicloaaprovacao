@@ -197,10 +197,14 @@ export function useFirebaseSync() {
                 date: notif.date
               });
             }
-            // Deleta o documento inbox para não duplicar no futuro
-            deleteDoc(doc(db, 'notifications', notif.id)).catch((err) => {
-              console.warn('[Firebase] Não foi possível apagar a notificação temporária do inbox:', err.message);
-            });
+            // Aguarda 5s antes de deletar o documento do inbox.
+            // Isso garante que o sync local → Firestore (users/{uid}) já ocorreu
+            // antes de remover o documento temporário, evitando perda ao recarregar.
+            setTimeout(() => {
+              deleteDoc(doc(db, 'notifications', notif.id)).catch((err) => {
+                console.warn('[Firebase] Não foi possível apagar a notificação temporária do inbox:', err.message);
+              });
+            }, 5000);
           }
         });
       }, (error) => {
@@ -290,7 +294,7 @@ export function useFirebaseSync() {
         // ────────────────────────────────────────────────
         // Public Profiling: Sync basic summary stats
         // ────────────────────────────────────────────────
-        if (store.userProfile.username && store.userProfile.username.trim().length > 0) {
+        if (store.userProfile.name && store.userProfile.name.trim().length > 0) {
           const totalQuestionsFromLogs = store.questionLogs.reduce((acc, curr) => acc + curr.totalQuestions, 0);
           const totalCorrectFromLogs = store.questionLogs.reduce((acc, curr) => acc + curr.correctAnswers, 0);
           const totalQuestionsFromSimulados = store.simulados.reduce((acc, curr) => acc + curr.total, 0);
@@ -320,9 +324,10 @@ export function useFirebaseSync() {
             uid: user.uid,
             name: store.userProfile.name || 'Estudante',
             searchName: (store.userProfile.name || 'Estudante').toLowerCase(), 
-            username: store.userProfile.username.toLowerCase().trim(),
+            username: store.userProfile.username ? store.userProfile.username.toLowerCase().trim() : '',
             bio: store.userProfile.bio || '',
             avatar: dataToSave.userProfile?.avatar || null,
+            followingIds: store.followingIds || [],
             editalInfo: {
               carreira: store.editalInfo.carreira || '',
               cargo: store.editalInfo.cargo || '',
