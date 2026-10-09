@@ -1,68 +1,59 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ─── Funções auxiliares ───
-    function isAuth() {
-      return request.auth != null;
+    
+    // 1. Coleção de Notificações (Real-time)
+    match /notifications/{notificationId} {
+      allow read, delete: if request.auth != null && request.auth.uid == resource.data.toUid;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && request.auth.uid == resource.data.toUid;
+    }
+    
+    // 2. Questões Compartilhadas (Real-time)
+    match /shared_questions/{questionId} {
+      allow read, delete: if request.auth != null && request.auth.uid == resource.data.toUid;
+      allow create: if request.auth != null;
     }
 
-    function isOwner(uid) {
-      return isAuth() && request.auth.uid == uid;
+    // 3. Perfis Públicos (Rankings e Busca)
+    match /profiles/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // ─── Dados privados do usuário ───
-    match /users/{uid} {
-      allow read, write: if isOwner(uid);
+    // 4. Documento Base do Usuário (Sync de Estado)
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-
-    // ─── Perfil público (rankings, busca de amigos) ───
-    match /profiles/{uid} {
-      // Qualquer autenticado pode ler (busca, ranking)
-      allow read: if isAuth();
-      // Apenas o dono pode escrever
-      allow write: if isOwner(uid);
-      // Índices necessários:
-      //  - uid (para queries IN)
-      //  - username (para busca por @usuario)
-      //  - searchName (para busca por nome)
-      //  - stats.totalQuestions (para ranking global)
-    }
-
-    // ─── Questões compartilhadas entre amigos ───
-    match /shared_questions/{id} {
-      // O destinatário pode ler; o remetente pode criar; ambos podem excluir
-      allow read: if isAuth() && resource.data.toUid == request.auth.uid;
-      allow create: if isAuth() && request.resource.data.fromUid == request.auth.uid;
-      allow delete: if isAuth() && (
-        resource.data.fromUid == request.auth.uid ||
-        resource.data.toUid == request.auth.uid
-      );
-      allow update: if isAuth() && resource.data.toUid == request.auth.uid;
-    }
-
-    // ─── Notificações ───
-    match /notifications/{id} {
-      // O destinatário pode ler e gerenciar
-      allow read: if isAuth() && resource.data.toUid == request.auth.uid;
-      // Qualquer autenticado pode criar notificação para outro usuário
-      allow create: if isAuth();
-      // O destinatário pode marcar como lida ou excluir
-      allow write: if isAuth() && resource.data.toUid == request.auth.uid;
-      // Índice necessário: toUid (para o listener em tempo real)
-    }
-
-    // ─── Questões públicas (compartilhamento externo) ───
-    match /public_questions/{id} {
-      // Qualquer pessoa pode ler (inclusive não autenticado)
+    
+    // 5. Questões públicas compartilhadas
+    match /public_questions/{questionId} {
+      // Qualquer pessoa pode ler (visitantes sem conta)
       allow read: if true;
-      // Apenas o criador pode criar o documento
-      allow create: if isAuth() && request.resource.data.fromUid == request.auth.uid;
-      // Qualquer um pode incrementar views/solves (update apenas campos específicos)
+      // Apenas usuários autenticados podem criar
+      allow create: if request.auth != null;
+      // Apenas o criador pode deletar
+      allow delete: if request.auth != null && resource.data.fromUid == request.auth.uid;
+      // Permitir update de views/solves por qualquer um
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['views', 'solves']);
-      // O criador pode excluir
-      allow delete: if isAuth() && resource.data.fromUid == request.auth.uid;
+                      .hasOnly(['views', 'solves']);
+    }
+
+    // 6. Feed da Comunidade (posts, questões com gabarito, dicas, links, comentários e curtidas)
+    match /feed_posts/{postId} {
+      // Qualquer visitante ou aluno pode ler os posts do feed
+      allow read: if true;
+      // Usuários autenticados podem publicar novos posts
+      allow create: if request.auth != null;
+      // Usuários autenticados podem interagir (curtir, responder enquetes/questões e comentar)
+      allow update: if request.auth != null;
+      // Apenas o próprio autor do post pode excluí-lo
+      allow delete: if request.auth != null && resource.data.authorId == request.auth.uid;
+    }
+
+    // Regra padrão de segurança: Bloqueia qualquer outro acesso não explicitado acima
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

@@ -8,18 +8,18 @@ import { Account } from './components/Account';
 import { Login } from './components/Login';
 import { Signup } from './components/Signup';
 import { SharedQuestionView } from './components/SharedQuestionView';
-import { Ajudai } from './components/Ajudai';
+import { Feed } from './components/Feed';
 import { useStore } from './store';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 import { auth } from './lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle, LogOut, Users, BookOpen, CheckCircle2, GraduationCap, RefreshCw, Sparkles, Library } from 'lucide-react';
+import { LayoutDashboard, ListTodo, BrainCircuit, Trophy, Menu, X, UserCircle, LogOut, Users, BookOpen, CheckCircle2, GraduationCap, RefreshCw, Library, MessageSquare } from 'lucide-react';
 import { Rankings } from './components/Rankings';
 import { cn } from './lib/utils';
 import { NotificationCenter } from './components/NotificationCenter';
 import { Cursos } from './components/Cursos';
 
-type View = 'cursos' | 'dashboard' | 'edital' | 'flashcards' | 'ajudai' | 'simulados' | 'account' | 'rankings';
+type View = 'cursos' | 'dashboard' | 'edital' | 'flashcards' | 'feed' | 'simulados' | 'account' | 'rankings';
 
 export default function App() {
   useFirebaseSync();
@@ -52,7 +52,7 @@ export default function App() {
     { id: 'edital', label: 'Meu Edital', icon: ListTodo },
     { id: 'simulados', label: 'Simulados e Questões', icon: Trophy },
     { id: 'flashcards', label: 'Banco de Flashcards', icon: BrainCircuit },
-    { id: 'ajudai', label: 'AjudAÍ (Tutor IA)', icon: Sparkles },
+    { id: 'feed', label: 'Feed da Comunidade', icon: MessageSquare },
     { id: 'rankings', label: 'Rankings e Amigos', icon: Users },
   ] as const;
 
@@ -288,7 +288,7 @@ export default function App() {
             {currentView === 'dashboard' && <Dashboard />}
             {currentView === 'edital' && <Edital onViewChange={handleViewChange} />}
             {currentView === 'flashcards' && <Flashcards />}
-            {currentView === 'ajudai' && <Ajudai />}
+            {currentView === 'feed' && <Feed />}
             {currentView === 'simulados' && <Simulados />}
             {currentView === 'rankings' && <Rankings />}
             {currentView === 'account' && <Account />}
